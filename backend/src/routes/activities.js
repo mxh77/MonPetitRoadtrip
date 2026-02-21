@@ -49,6 +49,7 @@ router.post('/', async (req, res) => {
   const activity = await prisma.activity.create({
     data: {
       stepId,
+      userId: req.user.userId,
       type: type || 'OTHER',
       name,
       location: location || null,

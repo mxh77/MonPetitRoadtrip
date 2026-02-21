@@ -30,6 +30,7 @@ router.post('/', async (req, res) => {
   const accommodation = await prisma.accommodation.create({
     data: {
       stepId,
+      userId: req.user.userId,
       type: type || 'HOTEL',
       name,
       address: address || null,

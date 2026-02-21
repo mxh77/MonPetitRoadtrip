@@ -7,6 +7,7 @@ import {
   COLORS, FONTS, RADIUS, SPACING, STEP_TYPE, BOOKING_STATUS,
 } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
+import { useStep } from '../hooks/usePowerSync';
 
 function InfoRow({ icon, label, value }) {
   if (!value) return null;
@@ -63,9 +64,8 @@ function ActivityItem({ activity, onDelete }) {
 
 export default function StepDetailScreen({ route, navigation }) {
   const { stepId } = route.params;
-  const { currentRoadtrip, deleteActivity } = useRoadtripStore();
-
-  const step = currentRoadtrip?.steps?.find((s) => s.id === stepId);
+  const { deleteActivity } = useRoadtripStore();
+  const { step } = useStep(stepId);
 
   useEffect(() => {
     if (step?.name) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Alert, Animated, RefreshControl, ActivityIndicator,
@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS } from '../theme';
 import { useAuthStore } from '../store/authStore';
 import { useRoadtripStore } from '../store/roadtripStore';
+import { useRoadtrips } from '../hooks/usePowerSync';
 
 function StatusBadge({ status }) {
   const cfg = ROADTRIP_STATUS[status] || ROADTRIP_STATUS.DRAFT;
@@ -62,11 +63,8 @@ function RoadtripCard({ item, onPress, onDelete }) {
 
 export default function HomeScreen({ navigation }) {
   const { user, logout } = useAuthStore();
-  const { roadtrips, fetchRoadtrips, deleteRoadtrip, loading } = useRoadtripStore();
-
-  useEffect(() => {
-    fetchRoadtrips();
-  }, []);
+  const { deleteRoadtrip } = useRoadtripStore();
+  const { roadtrips, isLoading } = useRoadtrips();
 
   const handleDelete = useCallback(async (id) => {
     try {
@@ -108,7 +106,7 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       {/* ─── List ─────────────────────────────────────────────────────────── */}
-      {loading && roadtrips.length === 0 ? (
+      {isLoading && roadtrips.length === 0 ? (
         <View style={styles.loader}>
           <ActivityIndicator color={COLORS.accent} />
         </View>
@@ -119,13 +117,6 @@ export default function HomeScreen({ navigation }) {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           ListEmptyComponent={ListEmpty}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={fetchRoadtrips}
-              tintColor={COLORS.accent}
-            />
-          }
         />
       )}
 

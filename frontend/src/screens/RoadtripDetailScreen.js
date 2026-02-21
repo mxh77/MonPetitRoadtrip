@@ -1,11 +1,12 @@
 import React, { useEffect, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS, STEP_TYPE } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
+import { useRoadtrip } from '../hooks/usePowerSync';
 
 function StepCard({ step, onPress, onDelete }) {
   const typeCfg = STEP_TYPE[step.type] || STEP_TYPE.STAGE;
@@ -50,11 +51,8 @@ function StepCard({ step, onPress, onDelete }) {
 
 export default function RoadtripDetailScreen({ route, navigation }) {
   const { id } = route.params;
-  const { currentRoadtrip, fetchRoadtrip, deleteStep, loading } = useRoadtripStore();
-
-  useEffect(() => {
-    fetchRoadtrip(id);
-  }, [id]);
+  const { deleteStep } = useRoadtripStore();
+  const { roadtrip: currentRoadtrip } = useRoadtrip(id);
 
   useEffect(() => {
     if (currentRoadtrip?.title) {
@@ -70,18 +68,10 @@ export default function RoadtripDetailScreen({ route, navigation }) {
     }
   }, [deleteStep]);
 
-  if (loading && !currentRoadtrip) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator color={COLORS.accent} size="large" />
-      </View>
-    );
-  }
-
   if (!currentRoadtrip) {
     return (
       <View style={styles.loader}>
-        <Text style={styles.errorText}>Roadtrip introuvable.</Text>
+        <ActivityIndicator color={COLORS.accent} size="large" />
       </View>
     );
   }

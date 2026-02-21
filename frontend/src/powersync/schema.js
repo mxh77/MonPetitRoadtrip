@@ -1,0 +1,75 @@
+import { column, Schema, Table } from '@powersync/react-native';
+
+const roadtrips = new Table({
+  title: column.text,
+  startDate: column.text,
+  endDate: column.text,
+  coverPhotoUrl: column.text,
+  status: column.text,
+  createdAt: column.text,
+  updatedAt: column.text,
+  userId: column.text,
+});
+
+const steps = new Table({
+  type: column.text,
+  name: column.text,
+  location: column.text,
+  latitude: column.real,
+  longitude: column.real,
+  startDate: column.text,
+  endDate: column.text,
+  arrivalTime: column.text,
+  departureTime: column.text,
+  notes: column.text,
+  photoUrl: column.text,
+  order: column.integer,
+  createdAt: column.text,
+  updatedAt: column.text,
+  roadtripId: column.text,
+  userId: column.text,
+});
+
+const accommodations = new Table({
+  type: column.text,
+  name: column.text,
+  address: column.text,
+  checkIn: column.text,
+  checkOut: column.text,
+  bookingRef: column.text,
+  bookingUrl: column.text,
+  pricePerNight: column.real,
+  currency: column.text,
+  notes: column.text,
+  status: column.text,
+  createdAt: column.text,
+  updatedAt: column.text,
+  stepId: column.text,
+  userId: column.text,
+});
+
+const activities = new Table({
+  type: column.text,
+  name: column.text,
+  location: column.text,
+  startTime: column.text,
+  endTime: column.text,
+  bookingRef: column.text,
+  bookingUrl: column.text,
+  cost: column.real,
+  currency: column.text,
+  notes: column.text,
+  status: column.text,
+  order: column.integer,
+  createdAt: column.text,
+  updatedAt: column.text,
+  stepId: column.text,
+  userId: column.text,
+});
+
+export const AppSchema = new Schema({
+  roadtrips,
+  steps,
+  accommodations,
+  activities,
+});

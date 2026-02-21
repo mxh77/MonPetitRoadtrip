@@ -55,6 +55,7 @@ router.post('/', async (req, res) => {
   const step = await prisma.step.create({
     data: {
       roadtripId,
+      userId: req.user.userId,
       type,
       name,
       location: location || null,

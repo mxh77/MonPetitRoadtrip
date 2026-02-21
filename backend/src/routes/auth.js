@@ -2,6 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../lib/prisma');
+const auth = require('../middleware/auth');
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -55,6 +56,24 @@ router.post('/login', async (req, res) => {
   const { password: _pw, ...safeUser } = user;
 
   res.json({ user: safeUser, token });
+});
+
+// GET /api/auth/powersync-token — génère un token JWT compatible PowerSync
+router.get('/powersync-token', auth, async (req, res) => {
+  const psToken = jwt.sign(
+    {
+      sub: req.user.userId,
+      iat: Math.floor(Date.now() / 1000),
+    },
+    process.env.POWERSYNC_JWT_SECRET,
+    {
+      expiresIn: '1h',
+      audience: process.env.POWERSYNC_URL,
+      keyid: process.env.POWERSYNC_JWT_KID,
+    }
+  );
+
+  res.json({ token: psToken, powersyncUrl: process.env.POWERSYNC_URL });
 });
 
 module.exports = router;

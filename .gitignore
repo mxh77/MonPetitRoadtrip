@@ -17,6 +17,10 @@ frontend/expo-env.d.ts
 frontend/.env
 !frontend/.env.example
 
+# Dossiers natifs générés par `expo run:android` / `expo run:ios`
+frontend/android/
+frontend/ios/
+
 # ─── Native build artifacts ───────────────────────────────────────────────────
 *.orig.*
 *.jks

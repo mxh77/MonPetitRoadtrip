@@ -9,6 +9,7 @@ import {
 } from '@expo-google-fonts/cormorant-garamond';
 import { useFonts } from 'expo-font';
 import AppNavigator from './src/navigation/AppNavigator';
+import { AppPowerSyncProvider } from './src/powersync/PowerSyncProvider';
 import { COLORS } from './src/theme';
 
 export default function App() {
@@ -28,9 +29,9 @@ export default function App() {
   }
 
   return (
-    <>
+    <AppPowerSyncProvider>
       <StatusBar style="light" />
       <AppNavigator />
-    </>
+    </AppPowerSyncProvider>
   );
 }
