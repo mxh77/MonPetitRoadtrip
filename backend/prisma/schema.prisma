@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  name       String?
+  avatarUrl  String?
+  password   String?
+  provider   String     @default("email")
+  providerId String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  roadtrips  Roadtrip[]
+
+  @@map("users")
+}
+
+model Roadtrip {
+  id            String         @id @default(cuid())
+  title         String
+  startDate     DateTime?
+  endDate       DateTime?
+  coverPhotoUrl String?
+  status        RoadtripStatus @default(DRAFT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps         Step[]
+  photos        Photo[]
+
+  @@map("roadtrips")
+}
+
+enum RoadtripStatus {
+  DRAFT
+  PLANNED
+  ONGOING
+  COMPLETED
+}
+
+model Step {
+  id            String         @id @default(cuid())
+  type          StepType
+  name          String
+  location      String?
+  latitude      Float?
+  longitude     Float?
+  startDate     DateTime?
+  endDate       DateTime?
+  arrivalTime   String?
+  departureTime String?
+  notes         String?
+  photoUrl      String?
+  order         Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  roadtripId    String
+  roadtrip      Roadtrip       @relation(fields: [roadtripId], references: [id], onDelete: Cascade)
+  accommodation Accommodation?
+  activities    Activity[]
+  photos        Photo[]
+
+  @@map("steps")
+}
+
+enum StepType {
+  DEPARTURE
+  STAGE
+  STOP
+  RETURN
+}
+
+model Accommodation {
+  id            String        @id @default(cuid())
+  type          AccomType     @default(HOTEL)
+  name          String
+  address       String?
+  checkIn       DateTime?
+  checkOut      DateTime?
+  bookingRef    String?
+  bookingUrl    String?
+  pricePerNight Float?
+  currency      String        @default("EUR")
+  notes         String?
+  status        BookingStatus @default(PLANNED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  stepId        String        @unique
+  step          Step          @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@map("accommodations")
+}
+
+enum AccomType {
+  HOTEL
+  AIRBNB
+  CAMPING
+  HOSTEL
+  OTHER
+}
+
+model Activity {
+  id         String        @id @default(cuid())
+  type       ActivityType  @default(OTHER)
+  name       String
+  location   String?
+  startTime  DateTime?
+  endTime    DateTime?
+  bookingRef String?
+  bookingUrl String?
+  cost       Float?
+  currency   String        @default("EUR")
+  notes      String?
+  status     BookingStatus @default(PLANNED)
+  order      Int           @default(0)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  stepId     String
+  step       Step          @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@map("activities")
+}
+
+enum ActivityType {
+  TRANSPORT
+  ACTIVITY
+  RESTAURANT
+  OTHER
+}
+
+enum BookingStatus {
+  PLANNED
+  BOOKED
+  DONE
+  CANCELLED
+}
+
+model Photo {
+  id           String    @id @default(cuid())
+  url          String
+  cloudinaryId String?
+  isCover      Boolean   @default(false)
+  takenAt      DateTime?
+  createdAt    DateTime  @default(now())
+  roadtripId   String?
+  roadtrip     Roadtrip? @relation(fields: [roadtripId], references: [id], onDelete: Cascade)
+  stepId       String?
+  step         Step?     @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@map("photos")
+}

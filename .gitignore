@@ -1,0 +1,34 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+
+# ─── Environment files ───────────────────────────────────────────────────────
+.env
+!.env.example
+
+# ─── Backend ─────────────────────────────────────────────────────────────────
+backend/node_modules/
+
+# ─── Frontend / Expo ─────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.expo/
+frontend/dist/
+frontend/web-build/
+frontend/expo-env.d.ts
+frontend/.env
+!frontend/.env.example
+
+# ─── Native build artifacts ───────────────────────────────────────────────────
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.kotlin/
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Prisma ──────────────────────────────────────────────────────────────────
+backend/node_modules/.prisma/
