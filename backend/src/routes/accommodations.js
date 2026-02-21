@@ -48,6 +48,46 @@ router.post('/', async (req, res) => {
   res.status(201).json(accommodation);
 });
 
+// PUT /api/accommodations/:id — upsert (ID généré côté client)
+router.put('/:id', async (req, res) => {
+  const { stepId, type, name, address, checkIn, checkOut, bookingRef, bookingUrl, pricePerNight, currency, notes, status } = req.body;
+
+  const accommodation = await prisma.accommodation.upsert({
+    where: { id: req.params.id },
+    create: {
+      id: req.params.id,
+      stepId,
+      userId: req.user.userId,
+      type: type || 'HOTEL',
+      name: name || 'Hébergement',
+      address: address || null,
+      checkIn: checkIn ? new Date(checkIn) : null,
+      checkOut: checkOut ? new Date(checkOut) : null,
+      bookingRef: bookingRef || null,
+      bookingUrl: bookingUrl || null,
+      pricePerNight: pricePerNight ?? null,
+      currency: currency || 'EUR',
+      notes: notes || null,
+      status: status || 'PLANNED',
+    },
+    update: {
+      ...(type !== undefined && { type }),
+      ...(name !== undefined && { name }),
+      ...(address !== undefined && { address }),
+      ...(checkIn !== undefined && { checkIn: checkIn ? new Date(checkIn) : null }),
+      ...(checkOut !== undefined && { checkOut: checkOut ? new Date(checkOut) : null }),
+      ...(bookingRef !== undefined && { bookingRef }),
+      ...(bookingUrl !== undefined && { bookingUrl }),
+      ...(pricePerNight !== undefined && { pricePerNight }),
+      ...(currency !== undefined && { currency }),
+      ...(notes !== undefined && { notes }),
+      ...(status !== undefined && { status }),
+    },
+  });
+
+  res.json(accommodation);
+});
+
 // PATCH /api/accommodations/:id
 router.patch('/:id', async (req, res) => {
   const accommodation = await prisma.accommodation.findFirst({

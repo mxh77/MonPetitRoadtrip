@@ -68,6 +68,48 @@ router.post('/', async (req, res) => {
   res.status(201).json(activity);
 });
 
+// PUT /api/activities/:id — upsert (ID généré côté client)
+router.put('/:id', async (req, res) => {
+  const { stepId, type, name, location, startTime, endTime, bookingRef, bookingUrl, cost, currency, notes, status, order } = req.body;
+
+  const activity = await prisma.activity.upsert({
+    where: { id: req.params.id },
+    create: {
+      id: req.params.id,
+      stepId,
+      userId: req.user.userId,
+      type: type || 'OTHER',
+      name: name || 'Activité',
+      location: location || null,
+      startTime: startTime ? new Date(startTime) : null,
+      endTime: endTime ? new Date(endTime) : null,
+      bookingRef: bookingRef || null,
+      bookingUrl: bookingUrl || null,
+      cost: cost ?? null,
+      currency: currency || 'EUR',
+      notes: notes || null,
+      status: status || 'PLANNED',
+      order: order ?? 0,
+    },
+    update: {
+      ...(type !== undefined && { type }),
+      ...(name !== undefined && { name }),
+      ...(location !== undefined && { location }),
+      ...(startTime !== undefined && { startTime: startTime ? new Date(startTime) : null }),
+      ...(endTime !== undefined && { endTime: endTime ? new Date(endTime) : null }),
+      ...(bookingRef !== undefined && { bookingRef }),
+      ...(bookingUrl !== undefined && { bookingUrl }),
+      ...(cost !== undefined && { cost }),
+      ...(currency !== undefined && { currency }),
+      ...(notes !== undefined && { notes }),
+      ...(status !== undefined && { status }),
+      ...(order !== undefined && { order }),
+    },
+  });
+
+  res.json(activity);
+});
+
 // PATCH /api/activities/:id
 router.patch('/:id', async (req, res) => {
   const activity = await prisma.activity.findFirst({

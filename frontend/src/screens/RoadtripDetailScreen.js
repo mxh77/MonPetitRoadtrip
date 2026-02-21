@@ -50,9 +50,11 @@ function StepCard({ step, onPress, onDelete }) {
 }
 
 export default function RoadtripDetailScreen({ route, navigation }) {
-  const { id } = route.params;
+  const { id, roadtripData } = route.params;
   const { deleteStep } = useRoadtripStore();
-  const { roadtrip: currentRoadtrip } = useRoadtrip(id);
+  const { roadtrip: syncedRoadtrip } = useRoadtrip(id);
+  // Utilise les données passées par navigation en fallback le temps que PowerSync synce
+  const currentRoadtrip = syncedRoadtrip ?? (roadtripData ? { ...roadtripData, steps: [] } : null);
 
   useEffect(() => {
     if (currentRoadtrip?.title) {
@@ -124,13 +126,6 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             onDelete={() => handleDeleteStep(item.id)}
           />
         )}
-        refreshControl={
-          <RefreshControl
-            refreshing={loading}
-            onRefresh={() => fetchRoadtrip(id)}
-            tintColor={COLORS.accent}
-          />
-        }
         ListEmptyComponent={() => (
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>📍</Text>

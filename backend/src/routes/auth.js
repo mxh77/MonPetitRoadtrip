@@ -60,12 +60,15 @@ router.post('/login', async (req, res) => {
 
 // GET /api/auth/powersync-token — génère un token JWT compatible PowerSync
 router.get('/powersync-token', auth, async (req, res) => {
+  // PowerSync attend le secret décodé depuis base64url (pas la string brute)
+  const psSecret = Buffer.from(process.env.POWERSYNC_JWT_SECRET, 'base64url');
   const psToken = jwt.sign(
     {
       sub: req.user.userId,
+      user_id: req.user.userId,  // claim custom accessible via token_parameters.user_id
       iat: Math.floor(Date.now() / 1000),
     },
-    process.env.POWERSYNC_JWT_SECRET,
+    psSecret,
     {
       expiresIn: '1h',
       audience: process.env.POWERSYNC_URL,

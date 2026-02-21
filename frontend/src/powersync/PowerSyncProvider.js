@@ -10,13 +10,13 @@ export function AppPowerSyncProvider({ children }) {
 
   useEffect(() => {
     if (!token) {
-      // Pas connecté — on déconnecte PowerSync
       db.disconnect();
       return;
     }
 
     const getToken = () => Promise.resolve(token);
     connectorRef.current = new AppConnector(getToken);
+
     db.connect(connectorRef.current);
 
     return () => {

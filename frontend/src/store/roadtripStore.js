@@ -1,158 +1,41 @@
 import { create } from 'zustand';
-import client from '../api/client';
+import {
+  localCreateRoadtrip, localUpdateRoadtrip, localDeleteRoadtrip,
+  localCreateStep, localUpdateStep, localDeleteStep,
+  localCreateActivity, localDeleteActivity,
+  localCreateAccommodation,
+} from '../powersync/localWrite';
+import { useAuthStore } from './authStore';
 
-export const useRoadtripStore = create((set, get) => ({
-  roadtrips: [],
-  currentRoadtrip: null,
-  loading: false,
-  error: null,
+// Accès direct au store sans hook (utilisable hors composant React)
+const getUserId = () => useAuthStore.getState().user?.id;
+
+export const useRoadtripStore = create(() => ({
 
   // ─── Roadtrips ─────────────────────────────────────────────────────────────
 
-  fetchRoadtrips: async () => {
-    set({ loading: true, error: null });
-    try {
-      const res = await client.get('/api/roadtrips');
-      set({ roadtrips: res.data, loading: false });
-    } catch (err) {
-      set({ error: err.response?.data?.error || 'Erreur de chargement', loading: false });
-    }
-  },
+  createRoadtrip: (data) => localCreateRoadtrip(data, getUserId()),
 
-  fetchRoadtrip: async (id) => {
-    set({ loading: true, error: null });
-    try {
-      const res = await client.get(`/api/roadtrips/${id}`);
-      set({ currentRoadtrip: res.data, loading: false });
-      return res.data;
-    } catch (err) {
-      set({ error: err.response?.data?.error || 'Erreur de chargement', loading: false });
-      return null;
-    }
-  },
+  updateRoadtrip: (id, data) => localUpdateRoadtrip(id, data),
 
-  createRoadtrip: async (data) => {
-    const res = await client.post('/api/roadtrips', data);
-    set((state) => ({ roadtrips: [res.data, ...state.roadtrips] }));
-    return res.data;
-  },
-
-  updateRoadtrip: async (id, data) => {
-    const res = await client.patch(`/api/roadtrips/${id}`, data);
-    set((state) => ({
-      roadtrips: state.roadtrips.map((r) => (r.id === id ? res.data : r)),
-      currentRoadtrip: state.currentRoadtrip?.id === id ? res.data : state.currentRoadtrip,
-    }));
-    return res.data;
-  },
-
-  deleteRoadtrip: async (id) => {
-    await client.delete(`/api/roadtrips/${id}`);
-    set((state) => ({
-      roadtrips: state.roadtrips.filter((r) => r.id !== id),
-      currentRoadtrip: state.currentRoadtrip?.id === id ? null : state.currentRoadtrip,
-    }));
-  },
+  deleteRoadtrip: (id) => localDeleteRoadtrip(id),
 
   // ─── Steps ─────────────────────────────────────────────────────────────────
 
-  createStep: async (data) => {
-    const res = await client.post('/api/steps', data);
-    set((state) => {
-      if (!state.currentRoadtrip) return {};
-      return {
-        currentRoadtrip: {
-          ...state.currentRoadtrip,
-          steps: [...(state.currentRoadtrip.steps || []), res.data].sort(
-            (a, b) => a.order - b.order
-          ),
-        },
-      };
-    });
-    return res.data;
-  },
+  createStep: (data) => localCreateStep(data, getUserId()),
 
-  updateStep: async (id, data) => {
-    const res = await client.patch(`/api/steps/${id}`, data);
-    set((state) => {
-      if (!state.currentRoadtrip) return {};
-      return {
-        currentRoadtrip: {
-          ...state.currentRoadtrip,
-          steps: state.currentRoadtrip.steps.map((s) => (s.id === id ? res.data : s)),
-        },
-      };
-    });
-    return res.data;
-  },
+  updateStep: (id, data) => localUpdateStep(id, data),
 
-  deleteStep: async (id) => {
-    await client.delete(`/api/steps/${id}`);
-    set((state) => {
-      if (!state.currentRoadtrip) return {};
-      return {
-        currentRoadtrip: {
-          ...state.currentRoadtrip,
-          steps: state.currentRoadtrip.steps.filter((s) => s.id !== id),
-        },
-      };
-    });
-  },
+  deleteStep: (id) => localDeleteStep(id),
 
   // ─── Activities ────────────────────────────────────────────────────────────
 
-  createActivity: async (data) => {
-    const res = await client.post('/api/activities', data);
-    set((state) => {
-      if (!state.currentRoadtrip) return {};
-      return {
-        currentRoadtrip: {
-          ...state.currentRoadtrip,
-          steps: state.currentRoadtrip.steps.map((s) =>
-            s.id === data.stepId
-              ? { ...s, activities: [...(s.activities || []), res.data] }
-              : s
-          ),
-        },
-      };
-    });
-    return res.data;
-  },
+  createActivity: (data) => localCreateActivity(data, getUserId()),
 
-  deleteActivity: async (id, stepId) => {
-    await client.delete(`/api/activities/${id}`);
-    set((state) => {
-      if (!state.currentRoadtrip) return {};
-      return {
-        currentRoadtrip: {
-          ...state.currentRoadtrip,
-          steps: state.currentRoadtrip.steps.map((s) =>
-            s.id === stepId
-              ? { ...s, activities: s.activities.filter((a) => a.id !== id) }
-              : s
-          ),
-        },
-      };
-    });
-  },
+  deleteActivity: (id) => localDeleteActivity(id),
 
   // ─── Accommodation ─────────────────────────────────────────────────────────
 
-  createAccommodation: async (data) => {
-    const res = await client.post('/api/accommodations', data);
-    set((state) => {
-      if (!state.currentRoadtrip) return {};
-      return {
-        currentRoadtrip: {
-          ...state.currentRoadtrip,
-          steps: state.currentRoadtrip.steps.map((s) =>
-            s.id === data.stepId ? { ...s, accommodation: res.data } : s
-          ),
-        },
-      };
-    });
-    return res.data;
-  },
-
-  clearCurrentRoadtrip: () => set({ currentRoadtrip: null }),
+  createAccommodation: (data) => localCreateAccommodation(data, getUserId()),
 }));
+

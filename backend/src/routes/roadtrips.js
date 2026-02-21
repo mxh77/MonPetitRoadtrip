@@ -64,6 +64,33 @@ router.get('/:id', async (req, res) => {
   res.json(roadtrip);
 });
 
+// PUT /api/roadtrips/:id — upsert (ID généré côté client pour l'offline-first)
+router.put('/:id', async (req, res) => {
+  const { title, startDate, endDate, coverPhotoUrl, status } = req.body;
+
+  const roadtrip = await prisma.roadtrip.upsert({
+    where: { id: req.params.id },
+    create: {
+      id: req.params.id,
+      title: title || 'Nouveau roadtrip',
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      coverPhotoUrl: coverPhotoUrl || null,
+      status: status || 'DRAFT',
+      userId: req.user.userId,
+    },
+    update: {
+      ...(title !== undefined && { title }),
+      ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
+      ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
+      ...(coverPhotoUrl !== undefined && { coverPhotoUrl }),
+      ...(status !== undefined && { status }),
+    },
+  });
+
+  res.json(roadtrip);
+});
+
 // PATCH /api/roadtrips/:id
 router.patch('/:id', async (req, res) => {
   const existing = await prisma.roadtrip.findFirst({

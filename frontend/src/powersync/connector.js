@@ -28,9 +28,55 @@ export class AppConnector {
     };
   }
 
-  // Les mutations passent toujours par notre API Express REST
-  // PowerSync gère uniquement la lecture offline
+  // Appelé par PowerSync quand le réseau revient pour syncer les mutations locales
   async uploadData(database) {
-    // Pas de write-back via PowerSync — on utilise l'API Express directement
+    const batch = await database.getCrudBatch(200);
+    if (!batch) return;
+
+    const token = await this.getToken();
+    if (!token) {
+      await batch.cancel();
+      return;
+    }
+
+    for (const entry of batch.crud) {
+      const { op, table, id, opData } = entry;
+      const url = `${API_URL}/api/${table}/${id}`;
+
+      try {
+        let method, body;
+        if (op === 'PUT') {
+          method = 'PUT';
+          body = JSON.stringify(opData);
+        } else if (op === 'PATCH') {
+          method = 'PATCH';
+          body = JSON.stringify(opData);
+        } else if (op === 'DELETE') {
+          method = 'DELETE';
+        } else {
+          continue;
+        }
+
+        const res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          ...(body ? { body } : {}),
+        });
+
+        // 404 = déjà supprimé côté serveur, on ignore
+        if (!res.ok && res.status !== 404) {
+          console.warn(`[uploadData] ${method} ${url} → ${res.status}`);
+        }
+      } catch (e) {
+        // Erreur réseau — on annule le batch, PowerSync réessaiera plus tard
+        await batch.cancel();
+        return;
+      }
+    }
+
+    await batch.complete();
   }
 }

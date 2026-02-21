@@ -75,6 +75,52 @@ router.post('/', async (req, res) => {
   res.status(201).json(step);
 });
 
+// PUT /api/steps/:id — upsert (ID généré côté client)
+router.put('/:id', async (req, res) => {
+  const {
+    roadtripId, type, name, location, latitude, longitude,
+    startDate, endDate, arrivalTime, departureTime, notes, photoUrl, order,
+  } = req.body;
+
+  const step = await prisma.step.upsert({
+    where: { id: req.params.id },
+    create: {
+      id: req.params.id,
+      roadtripId,
+      userId: req.user.userId,
+      type: type || 'STAGE',
+      name: name || 'Nouvelle étape',
+      location: location || null,
+      latitude: latitude ?? null,
+      longitude: longitude ?? null,
+      startDate: startDate ? new Date(startDate) : null,
+      endDate: endDate ? new Date(endDate) : null,
+      arrivalTime: arrivalTime || null,
+      departureTime: departureTime || null,
+      notes: notes || null,
+      photoUrl: photoUrl || null,
+      order: order ?? 0,
+    },
+    update: {
+      ...(type !== undefined && { type }),
+      ...(name !== undefined && { name }),
+      ...(location !== undefined && { location }),
+      ...(latitude !== undefined && { latitude }),
+      ...(longitude !== undefined && { longitude }),
+      ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
+      ...(endDate !== undefined && { endDate: endDate ? new Date(endDate) : null }),
+      ...(arrivalTime !== undefined && { arrivalTime }),
+      ...(departureTime !== undefined && { departureTime }),
+      ...(notes !== undefined && { notes }),
+      ...(photoUrl !== undefined && { photoUrl }),
+      ...(order !== undefined && { order }),
+    },
+    include: { accommodation: true, activities: true },
+  });
+
+  res.json(step);
+});
+
 // PATCH /api/steps/:id
 router.patch('/:id', async (req, res) => {
   const step = await prisma.step.findFirst({

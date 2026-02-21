@@ -10,9 +10,13 @@ import { useRoadtripStore } from '../store/roadtripStore';
 const STATUSES = ['DRAFT', 'PLANNED', 'ONGOING', 'COMPLETED'];
 
 export default function CreateRoadtripScreen({ navigation }) {
+  const formatDate = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const today = new Date();
+  const plus10 = new Date(today); plus10.setDate(today.getDate() + 10);
+
   const [title, setTitle] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(formatDate(today));
+  const [endDate, setEndDate] = useState(formatDate(plus10));
   const [status, setStatus] = useState('DRAFT');
   const [loading, setLoading] = useState(false);
 
@@ -48,7 +52,7 @@ export default function CreateRoadtripScreen({ navigation }) {
         endDate: parsedEnd,
         status,
       });
-      navigation.replace('RoadtripDetail', { id: roadtrip.id, title: roadtrip.title });
+      navigation.replace('RoadtripDetail', { id: roadtrip.id, title: roadtrip.title, roadtripData: roadtrip });
     } catch (err) {
       Alert.alert('Erreur', err.response?.data?.error || 'Impossible de créer le roadtrip.');
     } finally {

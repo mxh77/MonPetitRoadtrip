@@ -9,7 +9,12 @@ export function useRoadtrips() {
   const userId = useAuthStore((s) => s.user?.id);
   const { data, isLoading, error } = useQuery(
     userId
-      ? 'SELECT * FROM roadtrips WHERE userId = ? ORDER BY createdAt DESC'
+      ? `SELECT r.*, COUNT(s.id) as stepCount
+         FROM roadtrips r
+         LEFT JOIN steps s ON s.roadtripId = r.id
+         WHERE r.userId = ?
+         GROUP BY r.id
+         ORDER BY r.createdAt DESC`
       : 'SELECT * FROM roadtrips WHERE 1=0',
     userId ? [userId] : []
   );
