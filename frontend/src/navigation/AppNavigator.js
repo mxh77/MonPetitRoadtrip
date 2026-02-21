@@ -9,6 +9,7 @@ import HomeScreen from '../screens/HomeScreen';
 import CreateRoadtripScreen from '../screens/CreateRoadtripScreen';
 import RoadtripDetailScreen from '../screens/RoadtripDetailScreen';
 import StepDetailScreen from '../screens/StepDetailScreen';
+import CreateStepScreen from '../screens/CreateStepScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -55,6 +56,11 @@ export default function AppNavigator() {
               name="StepDetail"
               component={StepDetailScreen}
               options={{ title: '', headerShown: true }}
+            />
+            <Stack.Screen
+              name="CreateStep"
+              component={CreateStepScreen}
+              options={{ title: 'Nouvelle étape', headerShown: true }}
             />
           </>
         )}

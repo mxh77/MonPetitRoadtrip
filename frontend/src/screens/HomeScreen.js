@@ -1,21 +1,18 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Animated, PanResponder, ActivityIndicator, Dimensions,
+  Alert, ActivityIndicator,
+  Modal, TouchableWithoutFeedback,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS } from '../theme';
 import { useAuthStore } from '../store/authStore';
-import { useRoadtripStore } from '../store/roadtripStore';
 import { useRoadtrips } from '../hooks/usePowerSync';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const INITIALS_COLORS = ['#2D6A4F','#1D3557','#6B3A2A','#4A1942','#1B4332','#7B3F00'];
-const SWIPE_THRESHOLD = -80;
-const DELETE_BUTTON_WIDTH = 80;
+
 
 function getInitialsColor(str) {
   let h = 0;
@@ -74,6 +71,7 @@ function FeaturedCard({ roadtrip, onPress }) {
     : null;
   const dur = durationDays(roadtrip.startDate, roadtrip.endDate);
   const steps = Number(roadtrip.stepCount ?? 0);
+  const days = daysUntil(roadtrip.startDate);
   const words = roadtrip.title.trim().split(' ');
   const midIdx = Math.max(1, Math.floor(words.length / 2));
   const titleStart = words.slice(0, midIdx).join(' ');
@@ -87,9 +85,12 @@ function FeaturedCard({ roadtrip, onPress }) {
       </View>
       <View style={styles.featuredTop}>
         <StatusBadge status={roadtrip.status} dark />
-        <View style={styles.featuredArrow}>
-          <Text style={styles.featuredArrowText}>↗</Text>
-        </View>
+        {days !== null && days >= 0 && (
+          <View style={styles.countdownBadge}>
+            <Text style={styles.countdownNum}>{days}</Text>
+            <Text style={styles.countdownUnit}>jours</Text>
+          </View>
+        )}
       </View>
       <Text style={styles.featuredTitle}>
         {titleStart}
@@ -133,36 +134,7 @@ function NextDepartureBanner({ roadtrip }) {
   );
 }
 
-function RoadtripRow({ item, onPress, onDelete }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
-
-  const panResponder = useRef(PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dy) < Math.abs(g.dx),
-    onPanResponderMove: (_, g) => {
-      const dx = Math.min(0, Math.max(g.dx + (isOpen.current ? -DELETE_BUTTON_WIDTH : 0), -DELETE_BUTTON_WIDTH));
-      translateX.setValue(dx);
-    },
-    onPanResponderRelease: (_, g) => {
-      const shouldOpen = g.dx < SWIPE_THRESHOLD;
-      isOpen.current = shouldOpen;
-      Animated.spring(translateX, { toValue: shouldOpen ? -DELETE_BUTTON_WIDTH : 0, useNativeDriver: true, bounciness: 4 }).start();
-    },
-  })).current;
-
-  const close = () => {
-    isOpen.current = false;
-    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
-  };
-
-  const handleDelete = () => {
-    close();
-    Alert.alert('Supprimer ce roadtrip ?', `"${item.title}" sera définitivement supprimé.`, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: onDelete },
-    ]);
-  };
-
+function RoadtripRow({ item, onPress }) {
   const initials = getInitials(item.title);
   const color = getInitialsColor(item.title);
   const dateText = item.startDate
@@ -172,34 +144,98 @@ function RoadtripRow({ item, onPress, onDelete }) {
   const steps = Number(item.stepCount ?? 0);
 
   return (
-    <View style={styles.rowWrapper}>
-      <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-        <Text style={styles.deleteBtnIcon}>🗑</Text>
-        <Text style={styles.deleteBtnText}>Suppr.</Text>
-      </TouchableOpacity>
-      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => isOpen.current ? close() : onPress()}
-          activeOpacity={0.8}
-        >
-          <View style={[styles.rowInitials, { backgroundColor: color }]}>
-            <Text style={styles.rowInitialsText}>{initials}</Text>
-          </View>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={styles.rowMeta}>{dateText}{dur ? ` · ${dur} jours` : ''}</Text>
-            <View style={styles.rowFooter}>
-              <StatusBadge status={item.status} />
-              {steps > 0 && <Text style={styles.rowSteps}>{steps} étape{steps !== 1 ? 's' : ''}</Text>}
-            </View>
-          </View>
-          <Text style={styles.rowArrow}>›</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.8}>
+      <View style={[styles.rowInitials, { backgroundColor: color }]}>
+        <Text style={styles.rowInitialsText}>{initials}</Text>
+      </View>
+      <View style={styles.rowContent}>
+        <Text style={styles.rowTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.rowMeta}>{dateText}{dur ? ` · ${dur} jours` : ''}</Text>
+        <View style={styles.rowFooter}>
+          <StatusBadge status={item.status} />
+          {steps > 0 && <Text style={styles.rowSteps}>{steps} étape{steps !== 1 ? 's' : ''}</Text>}
+        </View>
+      </View>
+      <Text style={styles.rowArrow}>›</Text>
+    </TouchableOpacity>
   );
 }
+
+// ─── User menu ──────────────────────────────────────────────────────────────
+
+function UserMenu({ visible, onClose, onLogout }) {
+  const { bottom } = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={menuStyles.overlay}>
+          <TouchableWithoutFeedback>
+            <View style={[menuStyles.sheet, { paddingBottom: Math.max(bottom, 16) }]}>
+              <View style={menuStyles.handle} />
+
+              <Text style={menuStyles.title}>Mon compte</Text>
+
+              {/* Futures rubriques ici */}
+
+              <View style={menuStyles.divider} />
+
+              <TouchableOpacity style={menuStyles.item} onPress={onLogout}>
+                <Text style={menuStyles.itemIconDanger}>⎋</Text>
+                <Text style={menuStyles.itemLabelDanger}>Déconnexion</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+}
+
+const menuStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderColor: COLORS.border,
+  },
+  handle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+  },
+  title: {
+    fontFamily: FONTS.title,
+    fontSize: 22,
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginBottom: SPACING.sm,
+  },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    paddingVertical: SPACING.md,
+  },
+  itemIconDanger: { fontSize: 20, color: COLORS.error },
+  itemLabelDanger: {
+    fontSize: 16,
+    color: COLORS.error,
+    fontWeight: '600',
+  },
+});
 
 // ─── Tab bar ─────────────────────────────────────────────────────────────────
 
@@ -211,8 +247,9 @@ const TABS = [
 ];
 
 function TabBar({ active }) {
+  const { bottom } = useSafeAreaInsets();
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: Math.max(bottom, 8) }]}>
       {TABS.map(tab => (
         <TouchableOpacity
           key={tab.key}
@@ -231,16 +268,13 @@ function TabBar({ active }) {
 
 export default function HomeScreen({ navigation }) {
   const { user, logout } = useAuthStore();
-  const { deleteRoadtrip } = useRoadtripStore();
   const { roadtrips, isLoading } = useRoadtrips();
+  const [menuVisible, setMenuVisible] = useState(false);
 
   const featured = nextUpcoming(roadtrips);
   const otherRoadtrips = roadtrips.filter(r => r.id !== featured?.id);
-
-  const handleDelete = useCallback(async (id) => {
-    try { await deleteRoadtrip(id); }
-    catch { Alert.alert('Erreur', 'Impossible de supprimer ce roadtrip.'); }
-  }, [deleteRoadtrip]);
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const tabBarHeight = 54 + Math.max(bottomInset, 8);
 
   const goToRoadtrip = (item) => navigation.navigate('RoadtripDetail', { id: item.id, title: item.title });
 
@@ -264,7 +298,7 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity style={styles.iconBtn}>
               <Text style={styles.iconBtnText}>🔔</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconBtn, styles.avatarBtn]} onPress={logout}>
+            <TouchableOpacity style={[styles.iconBtn, styles.avatarBtn]} onPress={() => setMenuVisible(true)}>
               <Text style={styles.avatarText}>{(user?.name?.[0] ?? '?').toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
@@ -282,9 +316,6 @@ export default function HomeScreen({ navigation }) {
           </View>
         ) : (
           <>
-            {/* ─── Prochain départ ──────────────────────────────────────── */}
-            {featured && <NextDepartureBanner roadtrip={featured} />}
-
             {/* ─── Voyage à venir ───────────────────────────────────────── */}
             {featured && (
               <>
@@ -302,7 +333,6 @@ export default function HomeScreen({ navigation }) {
                     key={item.id}
                     item={item}
                     onPress={() => goToRoadtrip(item)}
-                    onDelete={() => handleDelete(item.id)}
                   />
                 ))}
               </>
@@ -314,12 +344,19 @@ export default function HomeScreen({ navigation }) {
       </ScrollView>
 
       {/* ─── FAB ──────────────────────────────────────────────────────────── */}
-      <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('CreateRoadtrip')}>
+      <TouchableOpacity style={[styles.fab, { bottom: tabBarHeight + 12 }]} onPress={() => navigation.navigate('CreateRoadtrip')}>
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
       {/* ─── Tab bar ──────────────────────────────────────────────────────── */}
       <TabBar active="home" />
+
+      {/* ─── User menu ────────────────────────────────────────────────────── */}
+      <UserMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        onLogout={() => { setMenuVisible(false); logout(); }}
+      />
     </SafeAreaView>
   );
 }
@@ -390,11 +427,17 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#0A1A0A',
   },
   featuredTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  featuredArrow: {
-    width: 32, height: 32, borderRadius: RADIUS.full,
-    backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center',
+  countdownBadge: {
+    alignItems: 'center',
+    backgroundColor: COLORS.accentDim,
+    borderWidth: 1, borderColor: COLORS.accent,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    minWidth: 52,
   },
-  featuredArrowText: { color: '#F2EFE8', fontSize: 16 },
+  countdownNum: { fontFamily: FONTS.title, fontSize: 26, color: COLORS.accent, lineHeight: 28 },
+  countdownUnit: { fontSize: 10, color: COLORS.accent, letterSpacing: 1 },
   featuredTitle: { fontFamily: FONTS.title, fontSize: 32, color: '#F2EFE8', lineHeight: 36, marginBottom: SPACING.sm },
   featuredTitleItalic: { fontFamily: FONTS.titleItalic, color: COLORS.accent },
   featuredMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, marginBottom: SPACING.md },
@@ -411,17 +454,11 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
 
   // Row (list item)
-  rowWrapper: { marginBottom: SPACING.sm, borderRadius: RADIUS.lg },
-  deleteBtn: {
-    position: 'absolute', right: 0, top: 0, bottom: 0, width: DELETE_BUTTON_WIDTH,
-    backgroundColor: '#E53935', alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.lg,
-  },
-  deleteBtnIcon: { fontSize: 18 },
-  deleteBtnText: { color: '#fff', fontSize: 10, fontWeight: '700', marginTop: 2 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
     backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
     borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   rowInitials: {
     width: 48, height: 48, borderRadius: RADIUS.md,
@@ -439,7 +476,7 @@ const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row', backgroundColor: COLORS.surface,
     borderTopWidth: 1, borderTopColor: COLORS.border,
-    paddingBottom: 8, paddingTop: 10,
+    paddingTop: 10,
   },
   tabItem: { flex: 1, alignItems: 'center', gap: 2 },
   tabIcon: { fontSize: 20, color: COLORS.textMuted },
@@ -450,7 +487,7 @@ const styles = StyleSheet.create({
   // FAB
   fab: {
     position: 'absolute',
-    bottom: 78,
+    bottom: 78, // overridden dynamically
     right: SPACING.lg,
     width: 52, height: 52, borderRadius: RADIUS.full, backgroundColor: COLORS.accent,
     alignItems: 'center', justifyContent: 'center',

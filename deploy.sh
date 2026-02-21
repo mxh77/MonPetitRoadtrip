@@ -13,7 +13,7 @@ RESET='\033[0m'
 # ─── Message de commit ───────────────────────────────────────────────────────
 if [ -z "$1" ]; then
   echo -e "${RED}✗ Message de commit manquant.${RESET}"
-  echo -e "  Usage : ${YELLOW}./deploy.sh \"message de commit\"${RESET}"
+  echo -e "  Usage : ${YELLOW}./deploy.sh \"message\"${RESET}"
   exit 1
 fi
 
@@ -21,7 +21,9 @@ MSG="$1"
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 echo -e "\n${YELLOW}→ Branche :${RESET} $BRANCH"
-echo -e "${YELLOW}→ Message :${RESET} $MSG\n"
+echo -e "${YELLOW}→ Message :${RESET}\n"
+echo "$MSG"
+echo
 
 # ─── Ajout de tous les fichiers ──────────────────────────────────────────────
 echo -e "${YELLOW}[1/3]${RESET} Staging des fichiers..."
