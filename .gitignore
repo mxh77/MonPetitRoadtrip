@@ -29,6 +29,7 @@ frontend/ios/
 *.key
 *.mobileprovision
 *.keystore
+*.apk
 frontend/keystore.properties
 frontend/.env.production
 .kotlin/

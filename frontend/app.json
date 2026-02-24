@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "frontend",
-    "slug": "frontend",
+    "name": "Mon Petit Roadtrip",
+    "slug": "monpetitroadtrip",
+    "scheme": "monpetitroadtrip",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.mxh7777.frontend"
+      "package": "com.mxh7777.monpetitroadtrip"
     },
     "web": {
       "favicon": "./assets/favicon.png"

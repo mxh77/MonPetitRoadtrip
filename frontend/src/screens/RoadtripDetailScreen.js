@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Modal, TouchableWithoutFeedback,
+  Alert, ActivityIndicator, Pressable,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS, BOOKING_STATUS } from '../theme';
@@ -122,16 +122,14 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 
   const rt = syncedRoadtrip ?? (roadtripData ? { ...roadtripData, steps: [] } : null);
 
+  const openMenu = () => setMenuVisible(true);
+
   useEffect(() => {
     navigation.setOptions({
       headerTransparent: true,
       title: '',
       headerTintColor: COLORS.text,
-      headerRight: () => (
-        <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ paddingHorizontal: 14 }}>
-          <Text style={{ color: COLORS.text, fontSize: 22, fontWeight: '600' }}>⋯</Text>
-        </TouchableOpacity>
-      ),
+      headerRight: () => null,
     });
   }, []);
 
@@ -182,8 +180,12 @@ export default function RoadtripDetailScreen({ route, navigation }) {
           <View style={styles.mountain2} />
         </View>
 
-        {/* Space for transparent nav header: status bar + nav bar (~44px) */}
-        <View style={{ height: top + 66 }} />
+        {/* Space for transparent nav header + bouton menu ⋯ */}
+        <View style={{ height: top + 66, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
+          <TouchableOpacity onPress={openMenu} style={{ paddingHorizontal: 14, paddingBottom: 8 }}>
+            <Text style={{ color: '#F2EFE8', fontSize: 26, fontWeight: '600' }}>⋯</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Status badge */}
         <View style={styles.heroBadge}>
@@ -356,23 +358,19 @@ export default function RoadtripDetailScreen({ route, navigation }) {
       </View>
 
       {/* ─── Menu ⋯ ────────────────────────────────────────────────────── */}
-      <Modal visible={menuVisible} transparent animationType="fade" onRequestClose={() => setMenuVisible(false)}>
-        <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
-          <View style={styles.menuOverlay}>
-            <TouchableWithoutFeedback>
-              <View style={[styles.menuSheet, { paddingBottom: Math.max(bottom, 16) }]}>
-                <View style={styles.menuHandle} />
-                <Text style={styles.menuTitle}>Options</Text>
-                <View style={styles.menuDivider} />
-                <TouchableOpacity style={styles.menuItem} onPress={handleDeleteRoadtrip}>
-                  <Text style={styles.menuItemIconDanger}>🗑</Text>
-                  <Text style={styles.menuItemLabelDanger}>Supprimer ce roadtrip</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
+      {menuVisible && (
+        <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
+          <Pressable style={[styles.menuSheet, { paddingBottom: Math.max(bottom, 16) }]} onPress={() => {}}>
+            <View style={styles.menuHandle} />
+            <Text style={styles.menuTitle}>Options</Text>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={handleDeleteRoadtrip}>
+              <Text style={styles.menuItemIconDanger}>🗑</Text>
+              <Text style={styles.menuItemLabelDanger}>Supprimer ce roadtrip</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      )}
     </SafeAreaView>
   );
 }
@@ -380,7 +378,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.bg },
+  root: { flex: 1, backgroundColor: COLORS.bg, position: 'relative' },
   loader: { flex: 1, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center' },
 
   // Hero header
@@ -513,7 +511,7 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: COLORS.accent, fontWeight: '600' },
 
   // Menu modal
-  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', zIndex: 999 },
   menuSheet: {
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,

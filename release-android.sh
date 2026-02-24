@@ -48,10 +48,10 @@ STORE_PASSWORD=$(grep "storePassword" "$KEYSTORE_PROPS" | cut -d'=' -f2)
 KEY_ALIAS=$(grep "keyAlias" "$KEYSTORE_PROPS" | cut -d'=' -f2)
 KEY_PASSWORD=$(grep "keyPassword" "$KEYSTORE_PROPS" | cut -d'=' -f2)
 
-# ─── Prebuild propre (NODE_ENV=production → .env.production) ─────────────────
+# ─── Prebuild propre (production = pas d'APP_VARIANT) ───────────────────────
 echo -e "${YELLOW}[1/4]${RESET} Prebuild Expo (production)..."
+unset APP_VARIANT
 cd "$FRONTEND_DIR"
-export NODE_ENV=production
 
 [ -d "android" ] && (cd android && ./gradlew --stop 2>/dev/null || true) && rm -rf android
 
@@ -94,10 +94,12 @@ cd "$FRONTEND_DIR/android"
 ./gradlew assembleRelease
 
 # ─── Install ─────────────────────────────────────────────────────────────────
-APK_PATH="$FRONTEND_DIR/android/app/build/outputs/apk/release/app-release.apk"
+APK_RAW="$FRONTEND_DIR/android/app/build/outputs/apk/release/app-release.apk"
+APK_PATH="$ROOT_DIR/monpetitroadtrip.apk"
 
-if [ -f "$APK_PATH" ]; then
-  echo -e "\n${GREEN}✓ APK :${RESET} $APK_PATH"
+if [ -f "$APK_RAW" ]; then
+  cp "$APK_RAW" "$APK_PATH"
+  echo -e "\n${GREEN}✓ APK : monpetitroadtrip.apk${RESET}"
   echo -e "\n${YELLOW}[4/4]${RESET} Installation sur le téléphone..."
   DEVICES=$(adb devices 2>/dev/null | grep -v "List of devices" | grep "device$" | wc -l)
   if [ "$DEVICES" -gt 0 ]; then

@@ -69,6 +69,9 @@ export class AppConnector {
         // 404 = déjà supprimé côté serveur, on ignore
         if (!res.ok && res.status !== 404) {
           console.warn(`[uploadData] ${method} ${url} → ${res.status}`);
+          // Erreur serveur (5xx) ou auth (401/403) → on annule, PowerSync réessaiera
+          await batch.cancel();
+          return;
         }
       } catch (e) {
         // Erreur réseau — on annule le batch, PowerSync réessaiera plus tard
