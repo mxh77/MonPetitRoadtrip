@@ -16,6 +16,22 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Request logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  const isSync = ['PUT', 'PATCH', 'DELETE'].includes(req.method) &&
+    /^\/(roadtrips|steps|activities|accommodations)/.test(req.path.replace('/api/', ''));
+
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const tag = isSync ? '[SYNC]' : '[API] ';
+    const status = res.statusCode;
+    const color = status >= 500 ? '\x1b[31m' : status >= 400 ? '\x1b[33m' : '\x1b[32m';
+    console.log(`${color}${tag}\x1b[0m ${req.method} ${req.path} → ${status} (${ms}ms)`);
+  });
+  next();
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

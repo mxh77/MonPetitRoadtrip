@@ -40,7 +40,43 @@ echo -e "${YELLOW}[2/3]${RESET} Commit..."
 git commit -m "$MSG"
 
 # ─── Push ────────────────────────────────────────────────────────────────────
-echo -e "${YELLOW}[3/3]${RESET} Push vers origin/$BRANCH..."
+echo -e "${YELLOW}[3/4]${RESET} Push vers origin/$BRANCH..."
 git push origin "$BRANCH"
+
+# ─── Deploy backend sur CT 111 ───────────────────────────────────────────────
+echo -e "${YELLOW}[4/4]${RESET} Déploiement backend sur CT 111..."
+
+SERVER="ct111"
+REMOTE_DIR="/opt/MonPetitRoadtrip/backend"
+LOCAL_DIR="$(cd "$(dirname "$0")/backend" && pwd)"
+
+# Vérifie que le serveur est joignable
+if ! ssh -o ConnectTimeout=5 "$SERVER" "echo ok" &>/dev/null; then
+  echo -e "${YELLOW}⚠ CT 111 inaccessible — déploiement backend ignoré.${RESET}"
+else
+  rsync -a --checksum \
+    --exclude='node_modules' \
+    --exclude='.env' \
+    --exclude='*.log' \
+    "$LOCAL_DIR/src/" "$SERVER:$REMOTE_DIR/src/"
+
+  rsync -a --checksum \
+    "$LOCAL_DIR/package.json" \
+    "$LOCAL_DIR/package-lock.json" \
+    "$SERVER:$REMOTE_DIR/"
+
+  rsync -a --checksum \
+    "$LOCAL_DIR/prisma/" "$SERVER:$REMOTE_DIR/prisma/"
+
+  ssh "$SERVER" "pm2 restart monpetitroadtrip-api --update-env" &>/dev/null
+
+  sleep 1
+  STATUS=$(ssh "$SERVER" "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health")
+  if [ "$STATUS" = "200" ]; then
+    echo -e "${GREEN}✓ Backend déployé et opérationnel${RESET}"
+  else
+    echo -e "${RED}✗ Backend déployé mais health check échoué (status: $STATUS)${RESET}"
+  fi
+fi
 
 echo -e "\n${GREEN}✓ Déployé avec succès sur origin/$BRANCH${RESET}\n"

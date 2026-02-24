@@ -21,6 +21,13 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.error('[API ERROR]', {
+      url: error.config?.url,
+      baseURL: error.config?.baseURL,
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+    });
     if (error.response?.status === 401) {
       useAuthStore.getState().logout();
     }

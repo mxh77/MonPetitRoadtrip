@@ -89,6 +89,23 @@ if ! grep -q "org.gradle.java.home" "$GRADLE_PROPS"; then
   echo -e "${GREEN}✓ JDK configuré dans gradle.properties${RESET}"
 fi
 
+# ─── Patch debug : applicationId distinct + nom différent ────────────────────
+BUILD_GRADLE="android/app/build.gradle"
+STRINGS_XML="android/app/src/main/res/values/strings.xml"
+
+# applicationIdSuffix ".debug" → com.mxh7777.frontend.debug (coexiste avec la release)
+if ! grep -q 'applicationIdSuffix' "$BUILD_GRADLE"; then
+  # Remplace uniquement la PREMIÈRE occurrence (celle dans buildTypes { debug { } })
+  sed -i '0,/signingConfig signingConfigs\.debug/s/signingConfig signingConfigs\.debug/applicationIdSuffix ".debug"\n            signingConfig signingConfigs.debug/' "$BUILD_GRADLE"
+  echo -e "${GREEN}✓ Debug : applicationIdSuffix '.debug' configuré${RESET}"
+fi
+
+# Nom affiché différent pour identifier l'app debug sur le téléphone
+if grep -q 'app_name' "$STRINGS_XML" && ! grep -q 'MPR Debug' "$STRINGS_XML"; then
+  sed -i 's|<string name="app_name">.*</string>|<string name="app_name">MPR Debug</string>|' "$STRINGS_XML"
+  echo -e "${GREEN}✓ Debug : nom app → 'MPR Debug'${RESET}"
+fi
+
 npx expo run:android
 
 # ─── Fin ─────────────────────────────────────────────────────────────────────

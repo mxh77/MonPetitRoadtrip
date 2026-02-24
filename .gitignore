@@ -28,6 +28,9 @@ frontend/ios/
 *.p12
 *.key
 *.mobileprovision
+*.keystore
+frontend/keystore.properties
+frontend/.env.production
 .kotlin/
 
 # ─── OS ──────────────────────────────────────────────────────────────────────
