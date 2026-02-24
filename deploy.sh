@@ -54,19 +54,13 @@ LOCAL_DIR="$(cd "$(dirname "$0")/backend" && pwd)"
 if ! ssh -o ConnectTimeout=5 "$SERVER" "echo ok" &>/dev/null; then
   echo -e "${YELLOW}⚠ CT 111 inaccessible — déploiement backend ignoré.${RESET}"
 else
-  rsync -a --checksum \
-    --exclude='node_modules' \
-    --exclude='.env' \
-    --exclude='*.log' \
-    "$LOCAL_DIR/src/" "$SERVER:$REMOTE_DIR/src/"
+  scp -r "$LOCAL_DIR/src" "$SERVER:$REMOTE_DIR/"
 
-  rsync -a --checksum \
-    "$LOCAL_DIR/package.json" \
+  scp "$LOCAL_DIR/package.json" \
     "$LOCAL_DIR/package-lock.json" \
     "$SERVER:$REMOTE_DIR/"
 
-  rsync -a --checksum \
-    "$LOCAL_DIR/prisma/" "$SERVER:$REMOTE_DIR/prisma/"
+  scp -r "$LOCAL_DIR/prisma" "$SERVER:$REMOTE_DIR/"
 
   ssh "$SERVER" "pm2 restart monpetitroadtrip-api --update-env" &>/dev/null
 
