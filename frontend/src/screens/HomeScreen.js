@@ -5,6 +5,7 @@ import {
   Modal, TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS } from '../theme';
 import { useAuthStore } from '../store/authStore';
 import { useRoadtrips } from '../hooks/usePowerSync';
@@ -273,7 +274,6 @@ export default function HomeScreen({ navigation }) {
   const { roadtrips, isLoading } = useRoadtrips();
   const [menuVisible, setMenuVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {

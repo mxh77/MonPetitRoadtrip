@@ -58,6 +58,7 @@ else
 
   scp "$LOCAL_DIR/package.json" \
     "$LOCAL_DIR/package-lock.json" \
+    "$LOCAL_DIR/.env" \
     "$SERVER:$REMOTE_DIR/"
 
   scp -r "$LOCAL_DIR/prisma" "$SERVER:$REMOTE_DIR/"
