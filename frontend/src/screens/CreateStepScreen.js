@@ -100,7 +100,9 @@ export default function CreateStepScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.root} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always">
+
+      {/* ─── En-tête fixe (hors ScrollView pour éviter FlatList imbriquée) ────────── */}
+      <View style={styles.header}>
 
         {/* ─── Type ────────────────────────────────────────────────────────── */}
         <View style={styles.inputGroup}>
@@ -130,11 +132,13 @@ export default function CreateStepScreen({ route, navigation }) {
             onChangeText={setName}
             placeholder="Paris, Lyon, Chamonix…"
             placeholderTextColor={COLORS.textDim}
-            autoFocus
           />
         </View>
 
-        {/* ─── Location ────────────────────────────────────────────────────── */}
+      </View>
+
+      {/* ─── Location (hors du header View pour éviter le clipping Android) ── */}
+      <View style={styles.locationWrapper}>
         <LocationPicker
           initialValue={location}
           onSelect={({ location: loc, latitude: lat, longitude: lng }) => {
@@ -143,6 +147,9 @@ export default function CreateStepScreen({ route, navigation }) {
             setLongitude(lng);
           }}
         />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always">
 
         {/* ─── Dates ───────────────────────────────────────────────────────── */}
         <View style={styles.row}>
@@ -244,6 +251,8 @@ export default function CreateStepScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
+  header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg },
+  locationWrapper: { paddingHorizontal: SPACING.lg },
   scroll: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
 
   inputGroup: { marginBottom: SPACING.lg },

@@ -1,9 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator, LogBox } from 'react-native';
-
-LogBox.ignoreLogs([
-  'VirtualizedLists should never be nested',
-]);
+import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
   CormorantGaramond_400Regular,
