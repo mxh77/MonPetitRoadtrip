@@ -112,7 +112,7 @@ function ActivityRow({ activity }) {
 
 export default function RoadtripDetailScreen({ route, navigation }) {
   const { id, roadtripData } = route.params;
-  const { deleteStep, deleteRoadtrip } = useRoadtripStore();
+  const { updateRoadtrip, deleteStep, deleteRoadtrip } = useRoadtripStore();
   const { roadtrip: syncedRoadtrip } = useRoadtrip(id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [activeTab, setActiveTab] = useState('steps');
@@ -262,12 +262,49 @@ export default function RoadtripDetailScreen({ route, navigation }) {
       <ScrollView style={styles.detail} contentContainerStyle={styles.detailContent}>
         {selectedStep ? (
           <>
-            {/* Step type badge */}
+            {/* Step type badge + delete */}
             {(() => {
               const badge = stepTypeBadge(selectedStep);
               return (
-                <View style={styles.stepTypeBadge}>
-                  <Text style={styles.stepTypeBadgeText}>{badge.icon} {badge.label}</Text>
+                <View style={styles.stepTypeBadgeRow}>
+                  <View style={styles.stepTypeBadge}>
+                    <Text style={styles.stepTypeBadgeText}>{badge.icon} {badge.label}</Text>
+                  </View>
+                  <View style={styles.stepActionBtns}>
+                  <TouchableOpacity
+                    style={styles.stepEditBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    onPress={() => navigation.navigate('EditStep', { step: selectedStep })}
+                  >
+                    <Text style={styles.stepEditIcon}>✏️</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.stepDeleteBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    onPress={() =>
+                      Alert.alert(
+                        'Supprimer cette étape ?',
+                        `« ${selectedStep.name} » sera définitivement supprimée.`,
+                        [
+                          { text: 'Annuler', style: 'cancel' },
+                          {
+                            text: 'Supprimer', style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                await deleteStep(selectedStep.id);
+                                setSelectedStepIdx(0);
+                              } catch {
+                                Alert.alert('Erreur', 'Impossible de supprimer cette étape.');
+                              }
+                            },
+                          },
+                        ]
+                      )
+                    }
+                  >
+                    <Text style={styles.stepDeleteIcon}>🗑</Text>
+                  </TouchableOpacity>
+                  </View>
                 </View>
               );
             })()}
@@ -278,7 +315,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
               return (
                 <Text style={styles.stepTitle}>
                   {s1}
-                  {s2 ? <Text style={styles.stepTitleItalic}>{s2}</Text> : null}
+                  {s2 ? <Text style={styles.stepTitleItalic}>{' ' + s2}</Text> : null}
                 </Text>
               );
             })()}
@@ -380,6 +417,17 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             <View style={styles.menuHandle} />
             <Text style={styles.menuTitle}>Options</Text>
             <View style={styles.menuDivider} />
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuVisible(false);
+                navigation.navigate('EditRoadtrip', { roadtrip: rt });
+              }}
+            >
+              <Text style={styles.menuItemIcon}>✏️</Text>
+              <Text style={styles.menuItemLabel}>Modifier le roadtrip</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
             <TouchableOpacity style={styles.menuItem} onPress={handleDeleteRoadtrip}>
               <Text style={styles.menuItemIconDanger}>🗑</Text>
               <Text style={styles.menuItemLabelDanger}>Supprimer ce roadtrip</Text>
@@ -454,14 +502,32 @@ const styles = StyleSheet.create({
   // Step detail
   detail: { flex: 1 },
   detailContent: { padding: SPACING.lg },
+  stepTypeBadgeRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
   stepTypeBadge: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: COLORS.accentDim, borderRadius: RADIUS.full,
     paddingHorizontal: SPACING.md, paddingVertical: 5,
-    alignSelf: 'flex-start', marginBottom: SPACING.sm,
     borderWidth: 1, borderColor: COLORS.accent + '44',
   },
   stepTypeBadgeText: { fontSize: 11, color: COLORS.accent, fontWeight: '700', letterSpacing: 0.8 },
+  stepActionBtns: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  stepEditBtn: {
+    padding: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  stepEditIcon: { fontSize: 14 },
+  stepDeleteBtn: {
+    padding: 6,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.error + '18',
+  },
+  stepDeleteIcon: { fontSize: 16 },
   stepTitle: { fontFamily: FONTS.title, fontSize: 36, color: COLORS.text, lineHeight: 40, marginBottom: SPACING.xs },
   stepTitleItalic: { fontFamily: FONTS.titleItalic, color: COLORS.accent },
   stepMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, marginBottom: SPACING.lg },
@@ -541,6 +607,8 @@ const styles = StyleSheet.create({
   menuTitle: { fontFamily: FONTS.title, fontSize: 22, color: COLORS.text, marginBottom: SPACING.md },
   menuDivider: { height: 1, backgroundColor: COLORS.border, marginBottom: SPACING.sm },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.md },
+  menuItemIcon: { fontSize: 20 },
+  menuItemLabel: { fontSize: 16, color: COLORS.text, fontWeight: '600' },
   menuItemIconDanger: { fontSize: 20, color: COLORS.error },
   menuItemLabelDanger: { fontSize: 16, color: COLORS.error, fontWeight: '600' },
 });

@@ -10,6 +10,8 @@ import CreateRoadtripScreen from '../screens/CreateRoadtripScreen';
 import RoadtripDetailScreen from '../screens/RoadtripDetailScreen';
 import StepDetailScreen from '../screens/StepDetailScreen';
 import CreateStepScreen from '../screens/CreateStepScreen';
+import EditRoadtripScreen from '../screens/EditRoadtripScreen';
+import EditStepScreen from '../screens/EditStepScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -61,6 +63,16 @@ export default function AppNavigator() {
               name="CreateStep"
               component={CreateStepScreen}
               options={{ title: 'Nouvelle étape', headerShown: true }}
+            />
+            <Stack.Screen
+              name="EditRoadtrip"
+              component={EditRoadtripScreen}
+              options={{ title: 'Modifier le roadtrip', headerShown: true }}
+            />
+            <Stack.Screen
+              name="EditStep"
+              component={EditStepScreen}
+              options={{ title: "Modifier l'étape", headerShown: true }}
             />
           </>
         )}

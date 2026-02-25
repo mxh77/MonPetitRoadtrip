@@ -10,23 +10,30 @@ import { useRoadtripStore } from '../store/roadtripStore';
 
 const STATUSES = ['DRAFT', 'PLANNED', 'ONGOING', 'COMPLETED'];
 
-export default function CreateRoadtripScreen({ navigation }) {
-  const formatDisplay = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-  const today = new Date();
-  const plus10 = new Date(today); plus10.setDate(today.getDate() + 10);
+export default function EditRoadtripScreen({ route, navigation }) {
+  const { roadtrip } = route.params;
 
-  const [title, setTitle] = useState('');
-  const [startDate, setStartDate] = useState(today);
-  const [endDate, setEndDate] = useState(plus10);
-  const [status, setStatus] = useState('DRAFT');
+  const formatDisplay = (d) =>
+    d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const parseDate = (str) => {
+    if (!str) return new Date();
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? new Date() : d;
+  };
+
+  const [title, setTitle] = useState(roadtrip.title ?? '');
+  const [startDate, setStartDate] = useState(parseDate(roadtrip.startDate));
+  const [endDate, setEndDate] = useState(parseDate(roadtrip.endDate));
+  const [status, setStatus] = useState(roadtrip.status ?? 'DRAFT');
   const [loading, setLoading] = useState(false);
 
   // Picker state
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerTarget, setPickerTarget] = useState(null); // 'start' | 'end'
-  const [pickerTemp, setPickerTemp] = useState(today);
+  const [pickerTemp, setPickerTemp] = useState(new Date());
 
-  const { createRoadtrip } = useRoadtripStore();
+  const { updateRoadtrip } = useRoadtripStore();
 
   const handleSubmitRef = useRef();
 
@@ -36,7 +43,7 @@ export default function CreateRoadtripScreen({ navigation }) {
         ? <ActivityIndicator color={COLORS.accent} style={{ marginRight: SPACING.md }} />
         : (
           <TouchableOpacity onPress={() => handleSubmitRef.current()} style={{ marginRight: SPACING.md }}>
-            <Text style={{ color: COLORS.accent, fontWeight: '700', fontSize: 16 }}>Créer</Text>
+            <Text style={{ color: COLORS.accent, fontWeight: '700', fontSize: 16 }}>Enregistrer</Text>
           </TouchableOpacity>
         ),
     });
@@ -65,15 +72,15 @@ export default function CreateRoadtripScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      const roadtrip = await createRoadtrip({
+      await updateRoadtrip(roadtrip.id, {
         title: title.trim(),
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         status,
       });
-      navigation.replace('RoadtripDetail', { id: roadtrip.id, title: roadtrip.title, roadtripData: roadtrip });
+      navigation.goBack();
     } catch (err) {
-      Alert.alert('Erreur', err.response?.data?.error || 'Impossible de créer le roadtrip.');
+      Alert.alert('Erreur', 'Impossible de modifier le roadtrip.');
     } finally {
       setLoading(false);
     }
@@ -83,7 +90,7 @@ export default function CreateRoadtripScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.root} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* ─── Title ──────────────────────────────────────────────────────── */}
+        {/* ─── Titre ─────────────────────────────────────────────────────── */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Titre *</Text>
           <TextInput
@@ -114,7 +121,7 @@ export default function CreateRoadtripScreen({ navigation }) {
           </View>
         </View>
 
-        {/* ─── Status ─────────────────────────────────────────────────────── */}
+        {/* ─── Statut ─────────────────────────────────────────────────────── */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Statut</Text>
           <View style={styles.statusRow}>

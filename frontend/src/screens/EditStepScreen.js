@@ -8,47 +8,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, STEP_TYPE } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
 
-const TYPES = Object.entries(STEP_TYPE); // [['DEPARTURE', {...}], ...]
+const TYPES = Object.entries(STEP_TYPE);
 
 function formatDisplay(d) {
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-export default function CreateStepScreen({ route, navigation }) {
-  const { roadtripId, stepCount = 0, startDate: rtStart } = route.params;
+function parseDate(str) {
+  if (!str) return null;
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
+}
 
-  const today = new Date();
-  const defaultDate = rtStart ? new Date(rtStart) : today;
-  defaultDate.setDate(defaultDate.getDate() + stepCount);
+export default function EditStepScreen({ route, navigation }) {
+  const { step } = route.params;
 
-  const [name, setName] = useState('');
-  const [type, setType] = useState('STAGE');
-  const [startDate, setStartDate] = useState(defaultDate);
-  const [endDate, setEndDate] = useState(null); // null = non définie
-  const [location, setLocation] = useState('');
-  const [notes, setNotes] = useState('');
+  const [name, setName] = useState(step.name ?? '');
+  const [type, setType] = useState(step.type ?? 'STAGE');
+  const [startDate, setStartDate] = useState(parseDate(step.startDate) ?? new Date());
+  const [endDate, setEndDate] = useState(parseDate(step.endDate));
+  const [location, setLocation] = useState(step.location ?? '');
+  const [notes, setNotes] = useState(step.notes ?? '');
   const [loading, setLoading] = useState(false);
 
   // Picker state
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState(null); // 'start' | 'end'
-  const [pickerTemp, setPickerTemp] = useState(defaultDate);
+  const [pickerTarget, setPickerTarget] = useState(null);
+  const [pickerTemp, setPickerTemp] = useState(new Date());
 
-  const { createStep } = useRoadtripStore();
-
-  const handleSubmitRef = useRef();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => loading
-        ? <ActivityIndicator color={COLORS.accent} style={{ marginRight: SPACING.md }} />
-        : (
-          <TouchableOpacity onPress={() => handleSubmitRef.current()} style={{ marginRight: SPACING.md }}>
-            <Text style={{ color: COLORS.accent, fontWeight: '700', fontSize: 16 }}>Ajouter</Text>
-          </TouchableOpacity>
-        ),
-    });
-  }, [navigation, loading]);
+  const { updateStep } = useRoadtripStore();
 
   const openPicker = (target) => {
     setPickerTarget(target);
@@ -68,30 +56,41 @@ export default function CreateStepScreen({ route, navigation }) {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      Alert.alert('Champ requis', 'Le nom de l\'étape est obligatoire.');
+      Alert.alert('Champ requis', "Le nom de l'étape est obligatoire.");
       return;
     }
-
     setLoading(true);
     try {
-      await createStep({
-        roadtripId,
+      await updateStep(step.id, {
         type,
         name: name.trim(),
         location: location.trim() || null,
         startDate: startDate.toISOString(),
         endDate: endDate ? endDate.toISOString() : null,
         notes: notes.trim() || null,
-        order: stepCount,
       });
       navigation.goBack();
-    } catch (err) {
-      Alert.alert('Erreur', 'Impossible de créer l\'étape.');
+    } catch {
+      Alert.alert('Erreur', "Impossible de modifier l'étape.");
     } finally {
       setLoading(false);
     }
   };
+
+  const handleSubmitRef = useRef();
   handleSubmitRef.current = handleSubmit;
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => loading
+        ? <ActivityIndicator color={COLORS.accent} style={{ marginRight: SPACING.md }} />
+        : (
+          <TouchableOpacity onPress={() => handleSubmitRef.current()} style={{ marginRight: SPACING.md }}>
+            <Text style={{ color: COLORS.accent, fontWeight: '700', fontSize: 16 }}>Enregistrer</Text>
+          </TouchableOpacity>
+        ),
+    });
+  }, [navigation, loading]);
 
   return (
     <SafeAreaView style={styles.root} edges={['bottom']}>
@@ -116,7 +115,7 @@ export default function CreateStepScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* ─── Name ────────────────────────────────────────────────────────── */}
+        {/* ─── Nom ─────────────────────────────────────────────────────────── */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Nom *</Text>
           <TextInput
@@ -129,7 +128,7 @@ export default function CreateStepScreen({ route, navigation }) {
           />
         </View>
 
-        {/* ─── Location ────────────────────────────────────────────────────── */}
+        {/* ─── Lieu ────────────────────────────────────────────────────────── */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Lieu (optionnel)</Text>
           <TextInput
@@ -242,10 +241,8 @@ export default function CreateStepScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
   scroll: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
-
   inputGroup: { marginBottom: SPACING.lg },
   row: { flexDirection: 'row', marginBottom: SPACING.lg },
-
   label: {
     color: COLORS.textDim,
     fontSize: 11,
@@ -286,7 +283,6 @@ const styles = StyleSheet.create({
   pickerTitle: { fontFamily: FONTS.titleRegular, fontSize: 16, color: COLORS.text },
   pickerCancel: { color: COLORS.textDim, fontSize: 15 },
   pickerConfirm: { color: COLORS.accent, fontSize: 15, fontWeight: '700' },
-
   typePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   typeBtn: {
     flexDirection: 'row',
@@ -299,14 +295,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
-  typeBtnActive: {
-    borderColor: COLORS.accent,
-    backgroundColor: COLORS.accent + '22',
-  },
+  typeBtnActive: { borderColor: COLORS.accent, backgroundColor: COLORS.accent + '22' },
   typeIcon: { fontSize: 16 },
   typeLabel: { fontSize: 13, color: COLORS.textDim, fontWeight: '600' },
   typeLabelActive: { color: COLORS.accent },
-
   btn: {
     backgroundColor: COLORS.accent,
     borderRadius: RADIUS.md,
@@ -315,10 +307,5 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   btnDisabled: { opacity: 0.6 },
-  btnText: {
-    color: COLORS.bg,
-    fontFamily: FONTS.bodyBold,
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  btnText: { color: COLORS.bg, fontFamily: FONTS.bodyBold, fontSize: 15, fontWeight: '700' },
 });
