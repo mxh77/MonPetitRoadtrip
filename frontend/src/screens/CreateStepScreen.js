@@ -7,6 +7,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, STEP_TYPE } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
+import LocationPicker from '../components/LocationPicker';
 
 const TYPES = Object.entries(STEP_TYPE); // [['DEPARTURE', {...}], ...]
 
@@ -26,6 +27,8 @@ export default function CreateStepScreen({ route, navigation }) {
   const [startDate, setStartDate] = useState(defaultDate);
   const [endDate, setEndDate] = useState(null); // null = non définie
   const [location, setLocation] = useState('');
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -79,6 +82,8 @@ export default function CreateStepScreen({ route, navigation }) {
         type,
         name: name.trim(),
         location: location.trim() || null,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
         startDate: startDate.toISOString(),
         endDate: endDate ? endDate.toISOString() : null,
         notes: notes.trim() || null,
@@ -95,7 +100,7 @@ export default function CreateStepScreen({ route, navigation }) {
 
   return (
     <SafeAreaView style={styles.root} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always">
 
         {/* ─── Type ────────────────────────────────────────────────────────── */}
         <View style={styles.inputGroup}>
@@ -130,16 +135,14 @@ export default function CreateStepScreen({ route, navigation }) {
         </View>
 
         {/* ─── Location ────────────────────────────────────────────────────── */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Lieu (optionnel)</Text>
-          <TextInput
-            style={styles.input}
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Adresse ou ville…"
-            placeholderTextColor={COLORS.textDim}
-          />
-        </View>
+        <LocationPicker
+          initialValue={location}
+          onSelect={({ location: loc, latitude: lat, longitude: lng }) => {
+            setLocation(loc);
+            setLatitude(lat);
+            setLongitude(lng);
+          }}
+        />
 
         {/* ─── Dates ───────────────────────────────────────────────────────── */}
         <View style={styles.row}>
