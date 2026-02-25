@@ -37,6 +37,7 @@ module.exports = {
     plugins: [
       'expo-font',
       '@journeyapps/react-native-quick-sqlite',
+      '@react-native-community/datetimepicker',
     ],
   },
 };

@@ -11,7 +11,7 @@ export const useAuthStore = create(
       token: null,
 
       register: async (email, password, name) => {
-        const res = await axios.post(`${API_URL}/api/auth/register`, { email, password, name });
+        const res = await axios.post(`${API_URL}/api/auth/register`, { email, password, name }, { timeout: 10000 });
         set({ user: res.data.user, token: res.data.token });
         return res.data;
       },
@@ -19,7 +19,7 @@ export const useAuthStore = create(
       login: async (email, password) => {
         console.log('[AUTH] login URL:', `${API_URL}/api/auth/login`);
         try {
-          const res = await axios.post(`${API_URL}/api/auth/login`, { email, password });
+          const res = await axios.post(`${API_URL}/api/auth/login`, { email, password }, { timeout: 10000 });
           set({ user: res.data.user, token: res.data.token });
           return res.data;
         } catch (e) {

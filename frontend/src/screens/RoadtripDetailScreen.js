@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Pressable,
+  Alert, ActivityIndicator, Pressable, Modal, StatusBar,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS, BOOKING_STATUS } from '../theme';
@@ -122,16 +122,13 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 
   const rt = syncedRoadtrip ?? (roadtripData ? { ...roadtripData, steps: [] } : null);
 
-  const openMenu = () => setMenuVisible(true);
+  const openMenu = useCallback(() => setMenuVisible(true), []);
+  const openMenuRef = useRef(openMenu);
+  openMenuRef.current = openMenu;
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerTransparent: true,
-      title: '',
-      headerTintColor: COLORS.text,
-      headerRight: () => null,
-    });
-  }, []);
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
 
   const steps = rt?.steps ?? [];
   const selectedStep = steps[selectedStepIdx] ?? null;
@@ -170,58 +167,72 @@ export default function RoadtripDetailScreen({ route, navigation }) {
   const [t1, t2] = splitTitle(rt.title);
 
   return (
-    <SafeAreaView style={styles.root} edges={['bottom']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <StatusBar barStyle="light-content" backgroundColor="#0D1F14" />
 
       {/* ─── Header dark green ─────────────────────────────────────────── */}
-      <View style={styles.heroCard}>
-        {/* Mountains decoration */}
-        <View style={styles.heroBg}>
-          <View style={styles.mountain1} />
-          <View style={styles.mountain2} />
-        </View>
+      <View>
+        <View style={styles.heroCard}>
+          {/* Mountains decoration */}
+          <View style={styles.heroBg}>
+            <View style={styles.mountain1} />
+            <View style={styles.mountain2} />
+          </View>
 
-        {/* Space for transparent nav header + bouton menu ⋯ */}
-        <View style={{ height: top + 66, justifyContent: 'flex-end', alignItems: 'flex-end' }}>
-          <TouchableOpacity onPress={openMenu} style={{ paddingHorizontal: 14, paddingBottom: 8 }}>
-            <Text style={{ color: '#F2EFE8', fontSize: 26, fontWeight: '600' }}>⋯</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Status badge */}
-        <View style={styles.heroBadge}>
-          <View style={[styles.heroBadgeDot, { backgroundColor: statusCfg.color }]} />
-          <Text style={[styles.heroBadgeText, { color: statusCfg.color }]}>
-            {statusCfg.label.toUpperCase()}
-          </Text>
-        </View>
-
-        {/* Title */}
-        <Text style={styles.heroTitle}>
-          {t1}
-          {t2 ? <Text style={styles.heroTitleItalic}>{' ' + t2}</Text> : null}
-        </Text>
-
-        {/* Meta */}
-        <View style={styles.heroMeta}>
-          {dateRange && <Text style={styles.heroMetaText}>📅 {dateRange}</Text>}
-          {steps.length > 0 && <Text style={styles.heroMetaText}>📍 {steps.length} étape{steps.length > 1 ? 's' : ''}</Text>}
-          {dur && <Text style={styles.heroMetaText}>· {dur} jours</Text>}
-        </View>
-
-        {/* Inner tabs */}
-        <View style={styles.innerTabs}>
-          {[['steps','ÉTAPES'],['map','CARTE'],['photos','PHOTOS']].map(([key, label]) => (
+          {/* Boutons retour + menu */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md, backgroundColor: '#000', marginHorizontal: -SPACING.lg, paddingHorizontal: SPACING.sm, paddingVertical: 4 }}>
             <TouchableOpacity
-              key={key}
-              style={styles.innerTab}
-              onPress={() => key !== 'steps' && Alert.alert('Bientôt disponible')}
+              onPress={() => navigation.goBack()}
+              style={{ padding: 8 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Text style={[styles.innerTabText, activeTab === key && styles.innerTabTextActive]}>
-                {label}
-              </Text>
-              {activeTab === key && <View style={styles.innerTabUnderline} />}
+              <Text style={{ color: '#F2EFE8', fontSize: 22 }}>‹</Text>
             </TouchableOpacity>
-          ))}
+            <TouchableOpacity
+              onPress={() => setMenuVisible(true)}
+              style={{ padding: 8 }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={{ color: '#F2EFE8', fontSize: 26, fontWeight: '600' }}>⋯</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Status badge */}
+          <View style={styles.heroBadge}>
+            <View style={[styles.heroBadgeDot, { backgroundColor: statusCfg.color }]} />
+            <Text style={[styles.heroBadgeText, { color: statusCfg.color }]}>
+              {statusCfg.label.toUpperCase()}
+            </Text>
+          </View>
+
+          {/* Title */}
+          <Text style={styles.heroTitle}>
+            {t1}
+            {t2 ? <Text style={styles.heroTitleItalic}>{' ' + t2}</Text> : null}
+          </Text>
+
+          {/* Meta */}
+          <View style={styles.heroMeta}>
+            {dateRange && <Text style={styles.heroMetaText}>📅 {dateRange}</Text>}
+            {steps.length > 0 && <Text style={styles.heroMetaText}>📍 {steps.length} étape{steps.length > 1 ? 's' : ''}</Text>}
+            {dur && <Text style={styles.heroMetaText}>· {dur} jours</Text>}
+          </View>
+
+          {/* Inner tabs */}
+          <View style={styles.innerTabs}>
+            {[['steps','ÉTAPES'],['map','CARTE'],['photos','PHOTOS']].map(([key, label]) => (
+              <TouchableOpacity
+                key={key}
+                style={styles.innerTab}
+                onPress={() => key !== 'steps' && Alert.alert('Bientôt disponible')}
+              >
+                <Text style={[styles.innerTabText, activeTab === key && styles.innerTabTextActive]}>
+                  {label}
+                </Text>
+                {activeTab === key && <View style={styles.innerTabUnderline} />}
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </View>
 
@@ -358,7 +369,12 @@ export default function RoadtripDetailScreen({ route, navigation }) {
       </View>
 
       {/* ─── Menu ⋯ ────────────────────────────────────────────────────── */}
-      {menuVisible && (
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMenuVisible(false)}
+      >
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           <Pressable style={[styles.menuSheet, { paddingBottom: Math.max(bottom, 16) }]} onPress={() => {}}>
             <View style={styles.menuHandle} />
@@ -370,7 +386,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
-      )}
+      </Modal>
     </SafeAreaView>
   );
 }

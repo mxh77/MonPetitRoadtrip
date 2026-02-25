@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Platform,
+  ScrollView, Alert, ActivityIndicator, Modal, Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
@@ -10,24 +11,37 @@ import { useRoadtripStore } from '../store/roadtripStore';
 const STATUSES = ['DRAFT', 'PLANNED', 'ONGOING', 'COMPLETED'];
 
 export default function CreateRoadtripScreen({ navigation }) {
-  const formatDate = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const formatDisplay = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
   const today = new Date();
   const plus10 = new Date(today); plus10.setDate(today.getDate() + 10);
 
   const [title, setTitle] = useState('');
-  const [startDate, setStartDate] = useState(formatDate(today));
-  const [endDate, setEndDate] = useState(formatDate(plus10));
+  const [startDate, setStartDate] = useState(today);
+  const [endDate, setEndDate] = useState(plus10);
   const [status, setStatus] = useState('DRAFT');
   const [loading, setLoading] = useState(false);
 
+  // Picker state
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState(null); // 'start' | 'end'
+  const [pickerTemp, setPickerTemp] = useState(today);
+
   const { createRoadtrip } = useRoadtripStore();
 
-  const parseDate = (str) => {
-    if (!str.trim()) return undefined;
-    // Accepts DD/MM/YYYY or YYYY-MM-DD
-    const parts = str.includes('/') ? str.split('/').reverse() : str.split('-');
-    const d = new Date(`${parts[0]}-${parts[1]}-${parts[2]}`);
-    return isNaN(d.getTime()) ? null : d.toISOString();
+  const openPicker = (target) => {
+    setPickerTarget(target);
+    setPickerTemp(target === 'start' ? startDate : endDate);
+    setPickerVisible(true);
+  };
+
+  const confirmPicker = () => {
+    if (pickerTarget === 'start') {
+      setStartDate(pickerTemp);
+      if (pickerTemp > endDate) setEndDate(pickerTemp);
+    } else {
+      setEndDate(pickerTemp);
+    }
+    setPickerVisible(false);
   };
 
   const handleSubmit = async () => {
@@ -35,21 +49,12 @@ export default function CreateRoadtripScreen({ navigation }) {
       Alert.alert('Champ requis', 'Le titre est obligatoire.');
       return;
     }
-
-    const parsedStart = startDate ? parseDate(startDate) : undefined;
-    const parsedEnd = endDate ? parseDate(endDate) : undefined;
-
-    if (parsedStart === null || parsedEnd === null) {
-      Alert.alert('Date invalide', 'Format attendu : JJ/MM/AAAA ou AAAA-MM-JJ');
-      return;
-    }
-
     setLoading(true);
     try {
       const roadtrip = await createRoadtrip({
         title: title.trim(),
-        startDate: parsedStart,
-        endDate: parsedEnd,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
         status,
       });
       navigation.replace('RoadtripDetail', { id: roadtrip.id, title: roadtrip.title, roadtripData: roadtrip });
@@ -80,25 +85,17 @@ export default function CreateRoadtripScreen({ navigation }) {
         <View style={styles.row}>
           <View style={[styles.inputGroup, { flex: 1 }]}>
             <Text style={styles.label}>Départ</Text>
-            <TextInput
-              style={styles.input}
-              value={startDate}
-              onChangeText={setStartDate}
-              placeholder="JJ/MM/AAAA"
-              placeholderTextColor={COLORS.textDim}
-              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
-            />
+            <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('start')}>
+              <Text style={styles.dateBtnIcon}>📅</Text>
+              <Text style={styles.dateBtnText}>{formatDisplay(startDate)}</Text>
+            </TouchableOpacity>
           </View>
           <View style={[styles.inputGroup, { flex: 1 }]}>
             <Text style={styles.label}>Retour</Text>
-            <TextInput
-              style={styles.input}
-              value={endDate}
-              onChangeText={setEndDate}
-              placeholder="JJ/MM/AAAA"
-              placeholderTextColor={COLORS.textDim}
-              keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'default'}
-            />
+            <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('end')}>
+              <Text style={styles.dateBtnIcon}>📅</Text>
+              <Text style={styles.dateBtnText}>{formatDisplay(endDate)}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -141,6 +138,57 @@ export default function CreateRoadtripScreen({ navigation }) {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ─── Date Picker Modal (iOS) ─────────────────────────────────────── */}
+      {Platform.OS === 'ios' && (
+        <Modal visible={pickerVisible} transparent animationType="slide">
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerSheet}>
+              <View style={styles.pickerHeader}>
+                <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                  <Text style={styles.pickerCancel}>Annuler</Text>
+                </TouchableOpacity>
+                <Text style={styles.pickerTitle}>
+                  {pickerTarget === 'start' ? 'Date de départ' : 'Date de retour'}
+                </Text>
+                <TouchableOpacity onPress={confirmPicker}>
+                  <Text style={styles.pickerConfirm}>OK</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={pickerTemp}
+                mode="date"
+                display="spinner"
+                locale="fr-FR"
+                minimumDate={pickerTarget === 'end' ? startDate : undefined}
+                onChange={(_, d) => d && setPickerTemp(d)}
+                style={{ backgroundColor: COLORS.surface }}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Android : picker direct (pas de modal) */}
+      {Platform.OS === 'android' && pickerVisible && (
+        <DateTimePicker
+          value={pickerTemp}
+          mode="date"
+          display="default"
+          minimumDate={pickerTarget === 'end' ? startDate : undefined}
+          onChange={(_, d) => {
+            setPickerVisible(false);
+            if (d) {
+              if (pickerTarget === 'start') {
+                setStartDate(d);
+                if (d > endDate) setEndDate(d);
+              } else {
+                setEndDate(d);
+              }
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -174,6 +222,24 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
   },
   statusChipText: { fontSize: 13, fontWeight: '600' },
+  dateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  dateBtnIcon: { fontSize: 16 },
+  dateBtnText: { color: COLORS.text, fontSize: 14, flex: 1 },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  pickerSheet: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, overflow: 'hidden' },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  pickerTitle: { fontFamily: FONTS.titleRegular, fontSize: 16, color: COLORS.text },
+  pickerCancel: { color: COLORS.textMuted, fontSize: 15 },
+  pickerConfirm: { color: COLORS.accent, fontSize: 15, fontWeight: '700' },
   submitBtn: {
     backgroundColor: COLORS.accent,
     borderRadius: RADIUS.md,

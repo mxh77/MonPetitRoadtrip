@@ -68,14 +68,3 @@ if [ "$1" != "--skip-build" ]; then
 
 fi
 
-# ─── Metro ───────────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[2/2]${RESET} Démarrage de Metro...\n"
-
-adb reverse tcp:8081 tcp:8081
-adb reverse tcp:3000 tcp:3000
-echo -e "${GREEN}✓ Ports 8081 et 3000 tunnelés (USB)${RESET}\n"
-
-adb shell am start -n "com.mxh7777.monpetitroadtrip.dev/.MainActivity" 2>/dev/null || true
-
-cd "$FRONTEND_DIR"
-APP_VARIANT=development npx expo start --dev-client

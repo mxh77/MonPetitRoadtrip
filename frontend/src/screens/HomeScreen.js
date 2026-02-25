@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, RefreshControl,
   Modal, TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS } from '../theme';
 import { useAuthStore } from '../store/authStore';
 import { useRoadtrips } from '../hooks/usePowerSync';
+import { db } from '../powersync/db';
+import { AppConnector } from '../powersync/connector';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -267,9 +269,23 @@ function TabBar({ active }) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function HomeScreen({ navigation }) {
-  const { user, logout } = useAuthStore();
+  const { user, logout, token } = useAuthStore();
   const { roadtrips, isLoading } = useRoadtrips();
   const [menuVisible, setMenuVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const connector = new AppConnector(() => Promise.resolve(token));
+      await db.connect(connector);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    } catch (e) {
+      console.warn('[Refresh]', e.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [token]);
 
   const featured = nextUpcoming(roadtrips);
   const otherRoadtrips = roadtrips.filter(r => r.id !== featured?.id);
@@ -283,7 +299,18 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.accent}
+            colors={[COLORS.accent]}
+          />
+        }
+      >
 
         {/* ─── Header ───────────────────────────────────────────────────── */}
         <View style={styles.header}>
