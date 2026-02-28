@@ -1,12 +1,17 @@
-import React, { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef, Component } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Pressable, Modal, StatusBar,
+  Alert, ActivityIndicator, Pressable, Modal, StatusBar, Dimensions,
 } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS, BOOKING_STATUS } from '../theme';
+import { COLORS, FONTS, RADIUS, SPACING } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
 import { useRoadtrip } from '../hooks/usePowerSync';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const CARD_W = 80;
+const CARD_GAP = 8;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,18 +34,20 @@ function getInitials(name) {
   if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
 }
-function splitTitle(title) {
-  const words = (title ?? '').trim().split(' ');
-  const mid = Math.max(1, Math.floor(words.length / 2));
-  return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+function computeRegion(pts) {
+  if (!pts.length) return { latitude: 46.2276, longitude: 2.2137, latitudeDelta: 10, longitudeDelta: 10 };
+  const lats = pts.map(s => s.latitude);
+  const lngs = pts.map(s => s.longitude);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLng + maxLng) / 2,
+    latitudeDelta: Math.max(maxLat - minLat + 1.0, 0.08),
+    longitudeDelta: Math.max(maxLng - minLng + 1.0, 0.08),
+  };
 }
-function stepTypeBadge(step) {
-  if (step.type === 'DEPARTURE') return { icon: '✈', label: 'DÉPART' };
-  if (step.type === 'RETURN')    return { icon: '✈', label: 'RETOUR' };
-  if (step.accommodation)        return { icon: '🌙', label: 'ÉTAPE AVEC NUITÉE' };
-  if (step.type === 'STOP')      return { icon: '⏸', label: 'ARRÊT' };
-  return { icon: '📍', label: 'ÉTAPE' };
-}
+
 const STEP_COLORS = {
   DEPARTURE: '#2D6A4F',
   RETURN:    '#1D3557',
@@ -48,63 +55,53 @@ const STEP_COLORS = {
   STOP:      '#4A1942',
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── MapErrorBoundary ────────────────────────────────────────────────────────
 
-function StepCircle({ step, active, dayNum, onPress }) {
+class MapErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(e, i) { console.error('[Map]', e?.message, i?.componentStack); }
+  render() {
+    if (this.state.hasError) return (
+      <View style={{ flex: 1, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: COLORS.textMuted }}>La carte n'a pas pu se charger.</Text>
+      </View>
+    );
+    return this.props.children;
+  }
+}
+
+// ─── StepCard ─────────────────────────────────────────────────────────────────
+
+function StepCard({ step, active, dayNum, onPress }) {
   const initials = getInitials(step.name);
   const bg = STEP_COLORS[step.type] ?? '#1B4332';
-  const label = step.type === 'DEPARTURE' ? 'Départ'
-              : step.type === 'RETURN'    ? 'Retour'
-              : step.name;
   return (
-    <TouchableOpacity style={styles.timelineItem} onPress={onPress}>
-      <View style={[styles.timelineCircle, active && styles.timelineCircleActive, { backgroundColor: bg }]}>
-        <Text style={styles.timelineInitials}>{initials}</Text>
-        {active && <View style={styles.timelineRing} />}
+    <TouchableOpacity onPress={onPress} style={styles.card} activeOpacity={0.8}>
+      <View style={[styles.cardCircle, { backgroundColor: bg }, active && styles.cardCircleActive]}>
+        <Text style={styles.cardInitials}>{initials}</Text>
       </View>
-      {dayNum !== null && (
-        <Text style={[styles.timelineDay, active && styles.timelineDayActive]}>
-          {`JOUR ${dayNum}`}
-        </Text>
+      {dayNum != null && (
+        <Text style={[styles.cardDay, active && styles.cardDayActive]}>J{dayNum}</Text>
       )}
-      <Text style={[styles.timelineName, active && styles.timelineNameActive]} numberOfLines={1}>
-        {label}
+      <Text style={[styles.cardName, active && styles.cardNameActive]} numberOfLines={2}>
+        {step.name}
       </Text>
     </TouchableOpacity>
   );
 }
 
-function AccommodationCard({ acc }) {
-  const cfg = BOOKING_STATUS[acc.status] ?? BOOKING_STATUS.PLANNED;
-  const nights = durationDays(acc.checkIn, acc.checkOut);
-  const checkInText = formatDate(acc.checkIn, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  return (
-    <View style={styles.accCard}>
-      <View style={styles.accIcon}>
-        <Text style={{ fontSize: 20 }}>🏨</Text>
-      </View>
-      <View style={styles.accContent}>
-        <Text style={styles.accName} numberOfLines={1}>{acc.name}</Text>
-        <Text style={styles.accMeta}>
-          {nights ? `${nights} nuit${nights > 1 ? 's' : ''}` : ''}
-          {checkInText ? ` · Check-in ${checkInText}` : ''}
-        </Text>
-      </View>
-      <View style={[styles.bookingBadge, { backgroundColor: cfg.color + '22' }]}>
-        <Text style={[styles.bookingBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
-      </View>
-    </View>
-  );
-}
+// ─── AddButton ────────────────────────────────────────────────────────────────
 
-function ActivityRow({ activity }) {
-  const statusColor = BOOKING_STATUS[activity.status]?.color ?? COLORS.textMuted;
+function AddButton({ onPress }) {
   return (
-    <View style={styles.actRow}>
-      <Text style={styles.actTime}>{activity.startTime ?? '--:--'}</Text>
-      <View style={[styles.actDot, { backgroundColor: statusColor }]} />
-      <Text style={styles.actName} numberOfLines={1}>{activity.name}</Text>
-    </View>
+    <TouchableOpacity onPress={onPress} style={styles.addBetween} activeOpacity={0.7}>
+      <View style={styles.addBetweenLine} />
+      <View style={styles.addBetweenCircle}>
+        <Text style={styles.addBetweenPlus}>+</Text>
+      </View>
+      <View style={styles.addBetweenLine} />
+    </TouchableOpacity>
   );
 }
 
@@ -112,318 +109,207 @@ function ActivityRow({ activity }) {
 
 export default function RoadtripDetailScreen({ route, navigation }) {
   const { id, roadtripData } = route.params;
-  const { updateRoadtrip, deleteStep, deleteRoadtrip } = useRoadtripStore();
+  const { deleteStep, deleteRoadtrip } = useRoadtripStore();
   const { roadtrip: syncedRoadtrip } = useRoadtrip(id);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [activeTab, setActiveTab] = useState('steps');
   const [selectedStepIdx, setSelectedStepIdx] = useState(0);
   const timelineRef = useRef(null);
-  const { bottom, top } = useSafeAreaInsets();
+  const mapRef = useRef(null);
+  const { bottom } = useSafeAreaInsets();
 
   const rt = syncedRoadtrip ?? (roadtripData ? { ...roadtripData, steps: [] } : null);
 
-  const openMenu = useCallback(() => setMenuVisible(true), []);
-  const openMenuRef = useRef(openMenu);
-  openMenuRef.current = openMenu;
-
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, [navigation]);
+  useLayoutEffect(() => { navigation.setOptions({ headerShown: false }); }, [navigation]);
 
   const steps = rt?.steps ?? [];
   const selectedStep = steps[selectedStepIdx] ?? null;
+  const stepsWithCoords = steps.filter(s => s.latitude != null && s.longitude != null);
+
+  // Centrer la carte sur l'étape sélectionnée
+  useEffect(() => {
+    if (!selectedStep?.latitude || !mapRef.current) return;
+    mapRef.current.animateToRegion({
+      latitude: selectedStep.latitude,
+      longitude: selectedStep.longitude,
+      latitudeDelta: 0.5,
+      longitudeDelta: 0.5,
+    }, 400);
+  }, [selectedStepIdx]);
+
+  // Scroll timeline vers la carte active
+  useEffect(() => {
+    if (!timelineRef.current) return;
+    const itemW = CARD_W + CARD_GAP + 40; // card + addBtn
+    const offset = selectedStepIdx * itemW - SCREEN_W / 2 + CARD_W / 2 + 16;
+    timelineRef.current.scrollTo({ x: Math.max(0, offset), animated: true });
+  }, [selectedStepIdx]);
 
   const handleDeleteRoadtrip = () => {
     setMenuVisible(false);
-    Alert.alert(
-      'Supprimer ce roadtrip ?',
-      `« ${rt?.title} » sera définitivement supprimé avec toutes ses étapes.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer', style: 'destructive',
-          onPress: async () => {
-            try { await deleteRoadtrip(id); navigation.goBack(); }
-            catch { Alert.alert('Erreur', 'Impossible de supprimer ce roadtrip.'); }
-          },
-        },
-      ]
-    );
+    Alert.alert('Supprimer ce roadtrip ?', `« ${rt?.title} » sera définitivement supprimé.`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: async () => {
+        try { await deleteRoadtrip(id); navigation.goBack(); }
+        catch { Alert.alert('Erreur', 'Impossible de supprimer.'); }
+      }},
+    ]);
   };
 
   if (!rt) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator color={COLORS.accent} size="large" />
-      </View>
-    );
+    return <View style={styles.loader}><ActivityIndicator color={COLORS.accent} size="large" /></View>;
   }
 
-  const statusCfg = ROADTRIP_STATUS[rt.status] ?? ROADTRIP_STATUS.DRAFT;
   const dur = durationDays(rt.startDate, rt.endDate);
-  const dateRange = rt.startDate
-    ? `${formatDate(rt.startDate)} – ${formatDate(rt.endDate) ?? '?'}`
-    : null;
-  const [t1, t2] = splitTitle(rt.title);
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D1F14" />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* ─── Header dark green ─────────────────────────────────────────── */}
-      <View>
-        <View style={styles.heroCard}>
-          {/* Mountains decoration */}
-          <View style={styles.heroBg}>
-            <View style={styles.mountain1} />
-            <View style={styles.mountain2} />
-          </View>
-
-          {/* Boutons retour + menu */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md, backgroundColor: '#000', marginHorizontal: -SPACING.lg, paddingHorizontal: SPACING.sm, paddingVertical: 4 }}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={{ padding: 8 }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={{ color: '#F2EFE8', fontSize: 22 }}>‹</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setMenuVisible(true)}
-              style={{ padding: 8 }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={{ color: '#F2EFE8', fontSize: 26, fontWeight: '600' }}>⋯</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Status badge */}
-          <View style={styles.heroBadge}>
-            <View style={[styles.heroBadgeDot, { backgroundColor: statusCfg.color }]} />
-            <Text style={[styles.heroBadgeText, { color: statusCfg.color }]}>
-              {statusCfg.label.toUpperCase()}
-            </Text>
-          </View>
-
-          {/* Title */}
-          <Text style={styles.heroTitle}>
-            {t1}
-            {t2 ? <Text style={styles.heroTitleItalic}>{' ' + t2}</Text> : null}
-          </Text>
-
-          {/* Meta */}
-          <View style={styles.heroMeta}>
-            {dateRange && <Text style={styles.heroMetaText}>📅 {dateRange}</Text>}
-            {steps.length > 0 && <Text style={styles.heroMetaText}>📍 {steps.length} étape{steps.length > 1 ? 's' : ''}</Text>}
-            {dur && <Text style={styles.heroMetaText}>· {dur} jours</Text>}
-          </View>
-
-          {/* Inner tabs */}
-          <View style={styles.innerTabs}>
-            {[['steps','ÉTAPES'],['map','CARTE'],['photos','PHOTOS']].map(([key, label]) => (
-              <TouchableOpacity
-                key={key}
-                style={styles.innerTab}
-                onPress={() => key !== 'steps' && Alert.alert('Bientôt disponible')}
+      {/* ─── Carte plein écran ──────────────────────────────────────── */}
+      <MapErrorBoundary>
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFillObject}
+          initialRegion={computeRegion(stepsWithCoords)}
+          showsUserLocation={false}
+          showsCompass={false}
+          showsMyLocationButton={false}
+        >
+          {stepsWithCoords.length >= 2 && (
+            <Polyline
+              coordinates={stepsWithCoords.map(s => ({ latitude: s.latitude, longitude: s.longitude }))}
+              strokeColor={COLORS.accent}
+              strokeWidth={3}
+              lineDashPattern={[12, 6]}
+            />
+          )}
+          {stepsWithCoords.map((step, idx) => {
+            const isSelected = step.id === selectedStep?.id;
+            const stepIdx = steps.indexOf(step);
+            return (
+              <Marker
+                key={step.id}
+                coordinate={{ latitude: step.latitude, longitude: step.longitude }}
+                onPress={() => setSelectedStepIdx(stepIdx)}
+                anchor={{ x: 0.5, y: 0.5 }}
               >
-                <Text style={[styles.innerTabText, activeTab === key && styles.innerTabTextActive]}>
-                  {label}
-                </Text>
-                {activeTab === key && <View style={styles.innerTabUnderline} />}
+                <View style={[styles.marker, isSelected && styles.markerSelected]}>
+                  <Text style={[styles.markerText, isSelected && styles.markerTextSelected]}>
+                    {getInitials(step.name)}
+                  </Text>
+                </View>
+              </Marker>
+            );
+          })}
+        </MapView>
+      </MapErrorBoundary>
+
+      {/* ─── Header overlay ────────────────────────────────────────── */}
+      <SafeAreaView style={styles.headerOverlay} edges={['top']}>
+        <View style={[styles.headerRow, { marginTop: 4 }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.headerBtnText}>‹</Text>
+          </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{rt.title}</Text>
+            {(dur || rt.startDate) ? (
+              <Text style={styles.headerSub}>
+                {rt.startDate ? `${formatDate(rt.startDate)} – ${formatDate(rt.endDate) ?? '?'}` : ''}
+                {dur ? `  ·  ${dur}j` : ''}
+                {'  ·  '}{steps.length} étape{steps.length > 1 ? 's' : ''}
+              </Text>
+            ) : null}
+          </View>
+
+          <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.headerBtnText}>⋯</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+
+      {/* ─── Step info panel ───────────────────────────────────────── */}
+      {selectedStep && (
+        <View style={[styles.infoPanel, { bottom: 170 + Math.max(bottom, 12) }]}>
+          <View style={styles.infoPanelInner}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.infoPanelName} numberOfLines={1}>{selectedStep.name}</Text>
+              <Text style={styles.infoPanelMeta} numberOfLines={1}>
+                {selectedStep.startDate ? `📅 ${formatDate(selectedStep.startDate)}` : ''}
+                {selectedStep.location ? `  📍 ${selectedStep.location}` : ''}
+              </Text>
+            </View>
+            <View style={styles.infoPanelActions}>
+              <TouchableOpacity
+                style={styles.infoPanelBtn}
+                onPress={() => navigation.navigate('EditStep', { step: selectedStep })}
+              >
+                <Text style={styles.infoPanelBtnText}>✏️</Text>
               </TouchableOpacity>
-            ))}
+              <TouchableOpacity
+                style={[styles.infoPanelBtn, { backgroundColor: COLORS.accent }]}
+                onPress={() => navigation.navigate('StepDetail', { stepId: selectedStep.id })}
+              >
+                <Text style={[styles.infoPanelBtnText, { color: '#fff', fontWeight: '700' }]}>→</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
-      {/* ─── Timeline ──────────────────────────────────────────────────── */}
-      {steps.length > 0 && (
-        <View style={styles.timelineWrapper}>
-          <ScrollView
-            ref={timelineRef}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.timeline}
-          >
-            {steps.map((step, idx) => (
-              <StepCircle
-                key={step.id}
+      {/* ─── Timeline Polarsteps ───────────────────────────────────── */}
+      <View style={[styles.timelineContainer, { paddingBottom: Math.max(bottom, 12) }]}>
+        <ScrollView
+          ref={timelineRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.timelineContent}
+        >
+          {steps.map((step, idx) => (
+            <View key={step.id} style={styles.timelineRow}>
+              <StepCard
                 step={step}
                 active={idx === selectedStepIdx}
                 dayNum={dayOffset(rt.startDate, step.startDate)}
                 onPress={() => setSelectedStepIdx(idx)}
               />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* ─── Step detail ───────────────────────────────────────────────── */}
-      <ScrollView style={styles.detail} contentContainerStyle={styles.detailContent}>
-        {selectedStep ? (
-          <>
-            {/* Step type badge + delete */}
-            {(() => {
-              const badge = stepTypeBadge(selectedStep);
-              return (
-                <View style={styles.stepTypeBadgeRow}>
-                  <View style={styles.stepTypeBadge}>
-                    <Text style={styles.stepTypeBadgeText}>{badge.icon} {badge.label}</Text>
-                  </View>
-                  <View style={styles.stepActionBtns}>
-                  <TouchableOpacity
-                    style={styles.stepEditBtn}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    onPress={() => navigation.navigate('EditStep', { step: selectedStep })}
-                  >
-                    <Text style={styles.stepEditIcon}>✏️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.stepDeleteBtn}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    onPress={() =>
-                      Alert.alert(
-                        'Supprimer cette étape ?',
-                        `« ${selectedStep.name} » sera définitivement supprimée.`,
-                        [
-                          { text: 'Annuler', style: 'cancel' },
-                          {
-                            text: 'Supprimer', style: 'destructive',
-                            onPress: async () => {
-                              try {
-                                await deleteStep(selectedStep.id);
-                                setSelectedStepIdx(0);
-                              } catch {
-                                Alert.alert('Erreur', 'Impossible de supprimer cette étape.');
-                              }
-                            },
-                          },
-                        ]
-                      )
-                    }
-                  >
-                    <Text style={styles.stepDeleteIcon}>🗑</Text>
-                  </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })()}
-
-            {/* Step title */}
-            {(() => {
-              const [s1, s2] = splitTitle(selectedStep.name);
-              return (
-                <Text style={styles.stepTitle}>
-                  {s1}
-                  {s2 ? <Text style={styles.stepTitleItalic}>{' ' + s2}</Text> : null}
-                </Text>
-              );
-            })()}
-
-            {/* Step meta */}
-            <View style={styles.stepMeta}>
-              {selectedStep.startDate && (
-                <Text style={styles.stepMetaText}>
-                  📅 {formatDate(selectedStep.startDate)} – {formatDate(selectedStep.endDate) ?? '?'}
-                </Text>
-              )}
-              {selectedStep.location && (
-                <Text style={styles.stepMetaText}>📍 {selectedStep.location}</Text>
-              )}
+              <AddButton
+                onPress={() => navigation.navigate('CreateStep', {
+                  roadtripId: rt.id,
+                  stepCount: steps.length,
+                  insertAfterIdx: idx,
+                  startDate: rt.startDate,
+                })}
+              />
             </View>
+          ))}
 
-            {/* ─── Hébergement ─────────────────────────────────────────── */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>🛏 HÉBERGEMENT</Text>
-                <TouchableOpacity
-                  style={styles.addBtn}
-                  onPress={() => Alert.alert('Bientôt disponible', 'Ajout d\'hébergement arrive prochainement.')}
-                >
-                  <Text style={styles.addBtnText}>+</Text>
-                </TouchableOpacity>
-              </View>
-              {selectedStep.accommodation ? (
-                <AccommodationCard acc={selectedStep.accommodation} />
-              ) : (
-                <Text style={styles.emptySection}>Aucun hébergement ajouté</Text>
-              )}
-            </View>
-
-            {/* ─── Activités ───────────────────────────────────────────── */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>⭐ ACTIVITÉS</Text>
-              </View>
-              {(selectedStep.activities ?? []).length === 0 ? (
-                <Text style={styles.emptySection}>Aucune activité ajoutée</Text>
-              ) : (
-                (selectedStep.activities ?? []).map((act) => (
-                  <ActivityRow key={act.id} activity={act} />
-                ))
-              )}
-            </View>
-          </>
-        ) : steps.length === 0 ? (
-          <View style={styles.emptySteps}>
-            <Text style={styles.emptyIcon}>📍</Text>
-            <Text style={styles.emptyText}>Aucune étape pour l'instant.</Text>
-          </View>
-        ) : null}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* ─── FAB nouvelle étape ─────────────────────────────────────── */}
-      {activeTab === 'steps' && (
-        <TouchableOpacity
-          style={[styles.fab, { bottom: 100 + Math.max(bottom, 8) }]}
-          onPress={() => navigation.navigate('CreateStep', {
-            roadtripId: rt.id,
-            stepCount: steps.length,
-            startDate: rt.startDate,
-          })}
-        >
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* ─── Tab bar (bottom) ──────────────────────────────────────────── */}
-      <View style={[styles.tabBar, { paddingBottom: Math.max(bottom, 8) }]}>
-        {[['home','⌂','Accueil'],['map','◎','Carte'],['planning','▦','Planning'],['profile','◯','Profil']].map(([key, icon, label]) => (
+          {/* Bouton "+" final pour ajouter une étape à la fin */}
           <TouchableOpacity
-            key={key}
-            style={styles.tabItem}
-            onPress={() => {
-              if (key === 'home') navigation.navigate('Home');
-              else Alert.alert('Bientôt disponible', `L'écran "${label}" arrive prochainement.`);
-            }}
+            style={styles.cardAddNew}
+            onPress={() => navigation.navigate('CreateStep', {
+              roadtripId: rt.id,
+              stepCount: steps.length,
+              startDate: rt.startDate,
+            })}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.tabIcon, key === 'home' && styles.tabIconActive]}>{icon}</Text>
-            <Text style={[styles.tabLabel, key === 'home' && styles.tabLabelActive]}>{label}</Text>
+            <View style={styles.cardAddNewCircle}>
+              <Text style={styles.cardAddNewPlus}>+</Text>
+            </View>
+            <Text style={styles.cardAddNewLabel}>Ajouter</Text>
           </TouchableOpacity>
-        ))}
+        </ScrollView>
       </View>
 
-      {/* ─── Menu ⋯ ────────────────────────────────────────────────────── */}
-      <Modal
-        visible={menuVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setMenuVisible(false)}
-      >
+      {/* ─── Menu ⋯ ────────────────────────────────────────────────── */}
+      <Modal visible={menuVisible} transparent animationType="slide" onRequestClose={() => setMenuVisible(false)}>
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           <Pressable style={[styles.menuSheet, { paddingBottom: Math.max(bottom, 16) }]} onPress={() => {}}>
             <View style={styles.menuHandle} />
             <Text style={styles.menuTitle}>Options</Text>
             <View style={styles.menuDivider} />
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                navigation.navigate('EditRoadtrip', { roadtrip: rt });
-              }}
-            >
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('EditRoadtrip', { roadtrip: rt }); }}>
               <Text style={styles.menuItemIcon}>✏️</Text>
               <Text style={styles.menuItemLabel}>Modifier le roadtrip</Text>
             </TouchableOpacity>
@@ -435,180 +321,129 @@ export default function RoadtripDetailScreen({ route, navigation }) {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: COLORS.bg, position: 'relative' },
+  root: { flex: 1, backgroundColor: '#0D1F14' },
   loader: { flex: 1, backgroundColor: COLORS.bg, alignItems: 'center', justifyContent: 'center' },
 
-  // Hero header
-  heroCard: { backgroundColor: '#0D1F14', overflow: 'hidden', paddingHorizontal: SPACING.lg, paddingBottom: 0 },
-  heroBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80 },
-  mountain1: {
-    position: 'absolute', bottom: 0, left: -20,
-    width: 0, height: 0,
-    borderLeftWidth: 160, borderRightWidth: 160, borderBottomWidth: 90,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#122010',
+  // Header
+  headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md, gap: SPACING.sm },
+  headerBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  mountain2: {
-    position: 'absolute', bottom: 0, right: -10,
-    width: 0, height: 0,
-    borderLeftWidth: 130, borderRightWidth: 90, borderBottomWidth: 70,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: '#0A1A0A',
+  headerBtnText: { color: '#fff', fontSize: 22, fontWeight: '500' },
+  headerCenter: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 6,
   },
-  heroBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.md, paddingVertical: 5,
-    alignSelf: 'flex-start', marginBottom: SPACING.sm,
-  },
-  heroBadgeDot: { width: 7, height: 7, borderRadius: 4 },
-  heroBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  heroTitle: { fontFamily: FONTS.title, fontSize: 40, color: '#F2EFE8', lineHeight: 44, marginBottom: SPACING.xs },
-  heroTitleItalic: { fontFamily: FONTS.titleItalic, color: COLORS.accent },
-  heroMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, marginBottom: SPACING.lg },
-  heroMetaText: { color: 'rgba(242,239,232,0.6)', fontSize: 13 },
+  headerTitle: { fontFamily: FONTS.title, fontSize: 18, color: '#fff' },
+  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
 
-  // Inner tabs
-  innerTabs: { flexDirection: 'row', gap: SPACING.xl, paddingTop: SPACING.xs },
-  innerTab: { paddingBottom: SPACING.sm, position: 'relative' },
-  innerTabText: { fontSize: 13, fontWeight: '700', letterSpacing: 1, color: 'rgba(242,239,232,0.4)' },
-  innerTabTextActive: { color: '#F2EFE8' },
-  innerTabUnderline: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: COLORS.accent, borderRadius: 1 },
+  // Info panel
+  infoPanel: { position: 'absolute', left: SPACING.md, right: SPACING.md, zIndex: 10 },
+  infoPanelInner: {
+    backgroundColor: 'rgba(13,31,20,0.92)',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1, borderColor: COLORS.border,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    gap: SPACING.md,
+  },
+  infoPanelName: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
+  infoPanelMeta: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
+  infoPanelActions: { flexDirection: 'row', gap: 8 },
+  infoPanelBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  infoPanelBtnText: { fontSize: 15 },
 
   // Timeline
-  timelineWrapper: { backgroundColor: '#111', borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  timeline: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.md, gap: 4 },
-  timelineItem: { alignItems: 'center', width: 72, marginHorizontal: 4 },
-  timelineCircle: {
+  timelineContainer: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(10,22,14,0.88)',
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingTop: SPACING.md,
+  },
+  timelineContent: { paddingHorizontal: SPACING.md, alignItems: 'center', paddingBottom: 4 },
+  timelineRow: { flexDirection: 'row', alignItems: 'center' },
+
+  // Step card
+  card: { width: CARD_W, alignItems: 'center' },
+  cardCircle: {
     width: 52, height: 52, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center', position: 'relative',
-  },
-  timelineCircleActive: { },
-  timelineRing: {
-    position: 'absolute', top: -4, left: -4, right: -4, bottom: -4,
-    borderRadius: 30, borderWidth: 2, borderColor: COLORS.accent,
-  },
-  timelineInitials: { fontFamily: FONTS.title, fontSize: 18, color: '#fff' },
-  timelineDay: { fontSize: 9, color: COLORS.textDim, letterSpacing: 0.5, marginTop: 6, fontWeight: '700' },
-  timelineDayActive: { color: COLORS.accent },
-  timelineName: { fontSize: 11, color: COLORS.textMuted, textAlign: 'center', marginTop: 2 },
-  timelineNameActive: { color: COLORS.text, fontWeight: '600' },
-
-  // Step detail
-  detail: { flex: 1 },
-  detailContent: { padding: SPACING.lg },
-  stepTypeBadgeRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: SPACING.sm,
-  },
-  stepTypeBadge: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORS.accentDim, borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.md, paddingVertical: 5,
-    borderWidth: 1, borderColor: COLORS.accent + '44',
-  },
-  stepTypeBadgeText: { fontSize: 11, color: COLORS.accent, fontWeight: '700', letterSpacing: 0.8 },
-  stepActionBtns: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  stepEditBtn: {
-    padding: 6,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  stepEditIcon: { fontSize: 14 },
-  stepDeleteBtn: {
-    padding: 6,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.error + '18',
-  },
-  stepDeleteIcon: { fontSize: 16 },
-  stepTitle: { fontFamily: FONTS.title, fontSize: 36, color: COLORS.text, lineHeight: 40, marginBottom: SPACING.xs },
-  stepTitleItalic: { fontFamily: FONTS.titleItalic, color: COLORS.accent },
-  stepMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, marginBottom: SPACING.lg },
-  stepMetaText: { color: COLORS.textMuted, fontSize: 13 },
-
-  // Sections
-  section: { marginBottom: SPACING.xl },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
-  sectionLabel: { fontSize: 11, letterSpacing: 1.5, color: COLORS.textMuted, fontWeight: '700' },
-  addBtn: {
-    width: 28, height: 28, borderRadius: RADIUS.full,
-    backgroundColor: COLORS.accentDim, borderWidth: 1, borderColor: COLORS.accent,
     alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'transparent',
   },
-  addBtnText: { color: COLORS.accent, fontSize: 18, lineHeight: 20, fontWeight: '300' },
-  emptySection: { color: COLORS.textDim, fontSize: 13, fontStyle: 'italic', paddingVertical: SPACING.sm },
-
-  // Accommodation card
-  accCard: {
-    flexDirection: 'row', alignItems: 'center', gap: SPACING.md,
-    backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
-    borderWidth: 1, borderColor: COLORS.border, padding: SPACING.md,
+  cardCircleActive: {
+    borderColor: COLORS.accent,
+    shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
   },
-  accIcon: {
-    width: 44, height: 44, borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surfaceElevated, alignItems: 'center', justifyContent: 'center',
-  },
-  accContent: { flex: 1 },
-  accName: { color: COLORS.text, fontSize: 15, fontWeight: '600', marginBottom: 2 },
-  accMeta: { color: COLORS.textMuted, fontSize: 12 },
-  bookingBadge: { borderRadius: RADIUS.full, paddingHorizontal: 10, paddingVertical: 4 },
-  bookingBadgeText: { fontSize: 11, fontWeight: '700' },
+  cardInitials: { fontFamily: FONTS.title, fontSize: 17, color: '#fff' },
+  cardDay: { fontSize: 9, color: 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: 5, letterSpacing: 0.5 },
+  cardDayActive: { color: COLORS.accent },
+  cardName: { fontSize: 10, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 2, lineHeight: 13 },
+  cardNameActive: { color: '#fff', fontWeight: '600' },
 
-  // Activity row
-  actRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: 8 },
-  actTime: { color: COLORS.textMuted, fontSize: 13, width: 44, textAlign: 'right' },
-  actDot: { width: 8, height: 8, borderRadius: 4 },
-  actName: { flex: 1, color: COLORS.text, fontSize: 15 },
-
-  // Empty states
-  emptySteps: { alignItems: 'center', paddingTop: 60 },
-  emptyIcon: { fontSize: 40, marginBottom: SPACING.md },
-  emptyText: { color: COLORS.textMuted, fontSize: 14 },
-
-  // FAB
-  fab: {
-    position: 'absolute', right: SPACING.lg,
-    width: 52, height: 52, borderRadius: RADIUS.full, backgroundColor: COLORS.accent,
+  // Add between
+  addBetween: { flexDirection: 'row', alignItems: 'center', width: 40 },
+  addBetweenLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+  addBetweenCircle: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  fabText: { color: COLORS.bg, fontSize: 26, fontWeight: '300', lineHeight: 30 },
+  addBetweenPlus: { color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 18 },
 
-  // Tab bar
-  tabBar: {
-    flexDirection: 'row', backgroundColor: COLORS.surface,
-    borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 10,
+  // Add new (fin de timeline)
+  cardAddNew: { width: CARD_W, alignItems: 'center', marginLeft: 4 },
+  cardAddNewCircle: {
+    width: 52, height: 52, borderRadius: 26,
+    borderWidth: 2, borderColor: COLORS.accent,
+    borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(52,168,83,0.08)',
   },
-  tabItem: { flex: 1, alignItems: 'center', gap: 2 },
-  tabIcon: { fontSize: 20, color: COLORS.textMuted },
-  tabIconActive: { color: COLORS.accent },
-  tabLabel: { fontSize: 10, color: COLORS.textMuted },
-  tabLabelActive: { color: COLORS.accent, fontWeight: '600' },
+  cardAddNewPlus: { color: COLORS.accent, fontSize: 26, fontWeight: '300', lineHeight: 30 },
+  cardAddNewLabel: { fontSize: 10, color: COLORS.accent, marginTop: 5 },
+
+  // Markers
+  marker: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#1B4332',
+    borderWidth: 2.5, borderColor: COLORS.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 5,
+  },
+  markerSelected: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.accent, borderColor: '#fff' },
+  markerText: { fontFamily: FONTS.title, fontSize: 13, color: '#fff' },
+  markerTextSelected: { fontSize: 15 },
 
   // Menu modal
-  menuOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end', zIndex: 999 },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   menuSheet: {
     backgroundColor: COLORS.surface,
     borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,
     paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm,
     borderTopWidth: 1, borderColor: COLORS.border,
   },
-  menuHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: SPACING.md,
-  },
+  menuHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: SPACING.md },
   menuTitle: { fontFamily: FONTS.title, fontSize: 22, color: COLORS.text, marginBottom: SPACING.md },
   menuDivider: { height: 1, backgroundColor: COLORS.border, marginBottom: SPACING.sm },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.md },
   menuItemIcon: { fontSize: 20 },
   menuItemLabel: { fontSize: 16, color: COLORS.text, fontWeight: '600' },
-  menuItemIconDanger: { fontSize: 20, color: COLORS.error },
+  menuItemIconDanger: { fontSize: 20 },
   menuItemLabelDanger: { fontSize: 16, color: COLORS.error, fontWeight: '600' },
 });

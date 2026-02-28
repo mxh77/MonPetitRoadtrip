@@ -1,35 +1,5 @@
 {
   "expo": {
-    "name": "Mon Petit Roadtrip",
-    "slug": "monpetitroadtrip",
-    "scheme": "monpetitroadtrip",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "package": "com.mxh7777.monpetitroadtrip"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-font",
-      "@journeyapps/react-native-quick-sqlite"
-    ]
+    "slug": "monpetitroadtrip"
   }
 }

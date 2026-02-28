@@ -20,6 +20,14 @@ RESET='\033[0m'
 
 FRONTEND_DIR="$(cd "$(dirname "$0")/frontend" && pwd)"
 
+# ─── Chargement du .env frontend (nécessaire pour expo prebuild) ──────────────
+if [ -f "$FRONTEND_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$FRONTEND_DIR/.env"
+  set +a
+fi
+
 # ─── Android SDK ─────────────────────────────────────────────────────────────
 if [ -z "$ANDROID_HOME" ]; then
   export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"
@@ -41,12 +49,26 @@ if [ "$1" != "--skip-build" ]; then
   fi
   echo -e "${GREEN}✓ $DEVICES appareil(s) connecté(s)${RESET}"
 
-  # Prebuild si le package .dev n'est pas encore dans AndroidManifest
-  if ! grep -q "com.mxh7777.monpetitroadtrip.dev" "$FRONTEND_DIR/android/app/src/main/AndroidManifest.xml" 2>/dev/null; then
+  # Prebuild si le projet natif n'existe pas encore
+  MANIFEST="$FRONTEND_DIR/android/app/src/main/AndroidManifest.xml"
+  NEED_PREBUILD=false
+  if ! grep -q "com.mxh7777.monpetitroadtrip.dev" "$MANIFEST" 2>/dev/null; then
+    NEED_PREBUILD=true
+  fi
+  if [ "$NEED_PREBUILD" = true ]; then
     echo -e "\n${YELLOW}⚙ Génération du projet natif (APP_VARIANT=development)...${RESET}"
     rm -rf "$FRONTEND_DIR/android"
     cd "$FRONTEND_DIR"
     APP_VARIANT=development npx expo prebuild --platform android --no-install
+  fi
+
+  # Vérification clé Google Maps
+  MANIFEST="$FRONTEND_DIR/android/app/src/main/AndroidManifest.xml"
+  if grep -q "com.google.android.geo.API_KEY" "$MANIFEST" 2>/dev/null; then
+    echo -e "${GREEN}✓ Clé Google Maps présente dans le manifest${RESET}"
+  else
+    echo -e "${RED}✗ Clé Google Maps absente du manifest — vérifie frontend/.env${RESET}"
+    exit 1
   fi
 
   # JDK dans gradle.properties
