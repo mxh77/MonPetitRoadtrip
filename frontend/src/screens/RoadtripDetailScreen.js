@@ -192,10 +192,10 @@ export default function RoadtripDetailScreen({ route, navigation }) {
                 coordinate={{ latitude: parseFloat(step.latitude), longitude: parseFloat(step.longitude) }}
                 onPress={() => setSelectedStepIdx(stepIdx)}
                 anchor={{ x: 0.5, y: 0.5 }}
-                tracksViewChanges={false}
+                tracksViewChanges={isSelected}
               >
                 <View style={[styles.marker, isSelected && styles.markerSelected]}>
-                  <Text style={[styles.markerText, isSelected && styles.markerTextSelected]}>
+                  <Text style={[styles.markerText, isSelected && styles.markerTextSelected]} numberOfLines={1}>
                     {getInitials(step.name)}
                   </Text>
                 </View>
@@ -242,11 +242,20 @@ export default function RoadtripDetailScreen({ route, navigation }) {
         >
           <View style={styles.infoPanelInner}>
             <View style={{ flex: 1 }}>
+              {(selectedStep.startDate || selectedStep.endDate) && (
+                <View style={styles.infoPanelDates}>
+                  <Text style={styles.infoPanelDatesText}>
+                    {selectedStep.startDate ? `🛬 ${formatDate(selectedStep.startDate)}${selectedStep.arrivalTime ? ` · ${selectedStep.arrivalTime}` : ''}` : ''}
+                  </Text>
+                  <Text style={styles.infoPanelDatesText}>
+                    {selectedStep.endDate ? `🛫 ${formatDate(selectedStep.endDate)}${selectedStep.departureTime ? ` · ${selectedStep.departureTime}` : ''}` : ''}
+                  </Text>
+                </View>
+              )}
               <Text style={styles.infoPanelName} numberOfLines={1}>{selectedStep.name}</Text>
-              <Text style={styles.infoPanelMeta} numberOfLines={1}>
-                {selectedStep.startDate ? `📅 ${formatDate(selectedStep.startDate)}` : ''}
-                {selectedStep.location ? `  📍 ${selectedStep.location}` : ''}
-              </Text>
+              {selectedStep.location && (
+                <Text style={styles.infoPanelMeta} numberOfLines={1}>📍 {selectedStep.location}</Text>
+              )}
               {Array.isArray(selectedStep.activities) && (<>
                 <Text style={styles.infoPanelCounts}>
                   {`🏨 ${selectedStep.accommodation ? 1 : 0} hébergement`}
@@ -375,6 +384,8 @@ const styles = StyleSheet.create({
   },
   infoPanelName: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
   infoPanelMeta: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
+  infoPanelDates: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, marginBottom: 2 },
+  infoPanelDatesText: { color: COLORS.text, fontSize: 13, fontWeight: '700' },
   infoPanelCounts: { color: COLORS.accent, fontSize: 11, marginTop: 3, fontWeight: '600' },
   infoPanelActions: { flexDirection: 'row', gap: 8 },
   infoPanelBtn: {
@@ -444,7 +455,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 4, elevation: 5,
   },
   markerSelected: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.accent, borderColor: '#fff' },
-  markerText: { fontFamily: FONTS.title, fontSize: 13, color: '#fff' },
+  markerText: { fontFamily: FONTS.title, fontSize: 13, color: '#fff', textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false },
   markerTextSelected: { fontSize: 15 },
 
   // Menu modal
