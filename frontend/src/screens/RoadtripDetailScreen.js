@@ -36,8 +36,8 @@ function getInitials(name) {
 }
 function computeRegion(pts) {
   if (!pts.length) return { latitude: 46.2276, longitude: 2.2137, latitudeDelta: 10, longitudeDelta: 10 };
-  const lats = pts.map(s => s.latitude);
-  const lngs = pts.map(s => s.longitude);
+  const lats = pts.map(s => parseFloat(s.latitude));
+  const lngs = pts.map(s => parseFloat(s.longitude));
   const minLat = Math.min(...lats), maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
   return {
@@ -115,7 +115,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
   const [selectedStepIdx, setSelectedStepIdx] = useState(0);
   const timelineRef = useRef(null);
   const mapRef = useRef(null);
-  const { bottom } = useSafeAreaInsets();
+  const { bottom, top } = useSafeAreaInsets();
 
   const rt = syncedRoadtrip ?? (roadtripData ? { ...roadtripData, steps: [] } : null);
 
@@ -123,14 +123,14 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 
   const steps = rt?.steps ?? [];
   const selectedStep = steps[selectedStepIdx] ?? null;
-  const stepsWithCoords = steps.filter(s => s.latitude != null && s.longitude != null);
+  const stepsWithCoords = steps.filter(s => s.latitude != null && s.longitude != null && !isNaN(parseFloat(s.latitude)) && !isNaN(parseFloat(s.longitude)));
 
   // Centrer la carte sur l'étape sélectionnée
   useEffect(() => {
     if (!selectedStep?.latitude || !mapRef.current) return;
     mapRef.current.animateToRegion({
-      latitude: selectedStep.latitude,
-      longitude: selectedStep.longitude,
+      latitude: parseFloat(selectedStep.latitude),
+      longitude: parseFloat(selectedStep.longitude),
       latitudeDelta: 0.5,
       longitudeDelta: 0.5,
     }, 400);
@@ -169,7 +169,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
       <MapErrorBoundary>
         <MapView
           ref={mapRef}
-          style={StyleSheet.absoluteFillObject}
+          style={{ position: 'absolute', top, left: 0, right: 0, bottom }}
           initialRegion={computeRegion(stepsWithCoords)}
           showsUserLocation={false}
           showsCompass={false}
@@ -177,7 +177,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
         >
           {stepsWithCoords.length >= 2 && (
             <Polyline
-              coordinates={stepsWithCoords.map(s => ({ latitude: s.latitude, longitude: s.longitude }))}
+              coordinates={stepsWithCoords.map(s => ({ latitude: parseFloat(s.latitude), longitude: parseFloat(s.longitude) }))}
               strokeColor={COLORS.accent}
               strokeWidth={3}
               lineDashPattern={[12, 6]}
@@ -189,9 +189,10 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             return (
               <Marker
                 key={step.id}
-                coordinate={{ latitude: step.latitude, longitude: step.longitude }}
+                coordinate={{ latitude: parseFloat(step.latitude), longitude: parseFloat(step.longitude) }}
                 onPress={() => setSelectedStepIdx(stepIdx)}
                 anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
               >
                 <View style={[styles.marker, isSelected && styles.markerSelected]}>
                   <Text style={[styles.markerText, isSelected && styles.markerTextSelected]}>
@@ -206,12 +207,16 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 
       {/* ─── Header overlay ────────────────────────────────────────── */}
       <SafeAreaView style={styles.headerOverlay} edges={['top']}>
-        <View style={[styles.headerRow, { marginTop: 4 }]}>
+        <View style={[styles.headerRow, { marginTop: 20 }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={styles.headerBtnText}>‹</Text>
           </TouchableOpacity>
 
-          <View style={styles.headerCenter}>
+          {/* Spacer pour pousser le bouton menu à droite */}
+          <View style={{ flex: 1 }} />
+
+          {/* Titre centré absolument */}
+          <View style={styles.headerCenter} pointerEvents="none">
             <Text style={styles.headerTitle} numberOfLines={1}>{rt.title}</Text>
             {(dur || rt.startDate) ? (
               <Text style={styles.headerSub}>
@@ -230,7 +235,11 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 
       {/* ─── Step info panel ───────────────────────────────────────── */}
       {selectedStep && (
-        <View style={[styles.infoPanel, { bottom: 170 + Math.max(bottom, 12) }]}>
+        <TouchableOpacity
+          style={[styles.infoPanel, { bottom: 170 + Math.max(bottom, 12) }]}
+          onPress={() => navigation.navigate('StepDetail', { stepId: selectedStep.id })}
+          activeOpacity={0.85}
+        >
           <View style={styles.infoPanelInner}>
             <View style={{ flex: 1 }}>
               <Text style={styles.infoPanelName} numberOfLines={1}>{selectedStep.name}</Text>
@@ -238,23 +247,25 @@ export default function RoadtripDetailScreen({ route, navigation }) {
                 {selectedStep.startDate ? `📅 ${formatDate(selectedStep.startDate)}` : ''}
                 {selectedStep.location ? `  📍 ${selectedStep.location}` : ''}
               </Text>
+              {Array.isArray(selectedStep.activities) && (<>
+                <Text style={styles.infoPanelCounts}>
+                  {`🏨 ${selectedStep.accommodation ? 1 : 0} hébergement`}
+                </Text>
+                <Text style={styles.infoPanelCounts}>
+                  {`🎯 ${selectedStep.activities.length} activité${selectedStep.activities.length > 1 ? 's' : ''}`}
+                </Text>
+              </>)}
             </View>
             <View style={styles.infoPanelActions}>
               <TouchableOpacity
                 style={styles.infoPanelBtn}
-                onPress={() => navigation.navigate('EditStep', { step: selectedStep })}
+                onPress={(e) => { e.stopPropagation(); navigation.navigate('EditStep', { step: selectedStep }); }}
               >
                 <Text style={styles.infoPanelBtnText}>✏️</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.infoPanelBtn, { backgroundColor: COLORS.accent }]}
-                onPress={() => navigation.navigate('StepDetail', { stepId: selectedStep.id })}
-              >
-                <Text style={[styles.infoPanelBtnText, { color: '#fff', fontWeight: '700' }]}>→</Text>
-              </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
       )}
 
       {/* ─── Timeline Polarsteps ───────────────────────────────────── */}
@@ -333,19 +344,24 @@ const styles = StyleSheet.create({
 
   // Header
   headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md, gap: SPACING.sm },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.md, gap: SPACING.sm, position: 'relative' },
   headerBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 6,
   },
-  headerBtnText: { color: '#fff', fontSize: 22, fontWeight: '500' },
+  headerBtnText: { color: '#000', fontSize: 26, fontWeight: '600', lineHeight: 30, includeFontPadding: false, textAlignVertical: 'center' },
   headerCenter: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 6,
+    position: 'absolute', left: 58, right: 58,
+    backgroundColor: 'rgba(0,0,0,1)',
+    borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingVertical: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 6, elevation: 6,
+    alignItems: 'center',
   },
-  headerTitle: { fontFamily: FONTS.title, fontSize: 18, color: '#fff' },
-  headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
+  headerTitle: { fontFamily: FONTS.title, fontSize: 20, color: '#fff', fontWeight: '700' },
+  headerSub: { fontSize: 12, color: 'rgba(255,255,255,1)', marginTop: 2 },
 
   // Info panel
   infoPanel: { position: 'absolute', left: SPACING.md, right: SPACING.md, zIndex: 10 },
@@ -359,6 +375,7 @@ const styles = StyleSheet.create({
   },
   infoPanelName: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
   infoPanelMeta: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
+  infoPanelCounts: { color: COLORS.accent, fontSize: 11, marginTop: 3, fontWeight: '600' },
   infoPanelActions: { flexDirection: 'row', gap: 8 },
   infoPanelBtn: {
     width: 36, height: 36, borderRadius: 18,
