@@ -1,8 +1,15 @@
 const path = require('path');
 const { withAndroidManifest } = require('@expo/config-plugins');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const IS_DEV = process.env.APP_VARIANT === 'development';
+
+// En release (pas d'APP_VARIANT), charger .env.production si présent, sinon .env
+const envFile = IS_DEV ? '.env' : (
+  require('fs').existsSync(path.resolve(__dirname, '.env.production'))
+    ? '.env.production'
+    : '.env'
+);
+require('dotenv').config({ path: path.resolve(__dirname, envFile) });
 
 module.exports = ({ config }) => {
   const finalConfig = {

@@ -6,13 +6,14 @@ import API_URL from '../api/config';
 
 export const useAuthStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
+      refreshToken: null,
 
       register: async (email, password, name) => {
         const res = await axios.post(`${API_URL}/api/auth/register`, { email, password, name }, { timeout: 10000 });
-        set({ user: res.data.user, token: res.data.token });
+        set({ user: res.data.user, token: res.data.token, refreshToken: res.data.refreshToken });
         return res.data;
       },
 
@@ -20,7 +21,7 @@ export const useAuthStore = create(
         console.log('[AUTH] login URL:', `${API_URL}/api/auth/login`);
         try {
           const res = await axios.post(`${API_URL}/api/auth/login`, { email, password }, { timeout: 10000 });
-          set({ user: res.data.user, token: res.data.token });
+          set({ user: res.data.user, token: res.data.token, refreshToken: res.data.refreshToken });
           return res.data;
         } catch (e) {
           console.error('[AUTH] login error:', e.message, e.code, e.response?.status);
@@ -28,8 +29,28 @@ export const useAuthStore = create(
         }
       },
 
-      logout: () => {
-        set({ user: null, token: null });
+      // Renouvelle silencieusement l'access token via le refresh token
+      // Retourne le nouveau token ou null si le refresh token est invalide/expiré
+      silentRefresh: async () => {
+        const { refreshToken } = get();
+        if (!refreshToken) return null;
+        try {
+          const res = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken }, { timeout: 10000 });
+          set({ token: res.data.token, refreshToken: res.data.refreshToken });
+          return res.data.token;
+        } catch {
+          // Refresh token invalide/expiré → on déconnecte
+          set({ user: null, token: null, refreshToken: null });
+          return null;
+        }
+      },
+
+      logout: async () => {
+        const { refreshToken } = get();
+        if (refreshToken) {
+          axios.post(`${API_URL}/api/auth/logout`, { refreshToken }).catch(() => {});
+        }
+        set({ user: null, token: null, refreshToken: null });
       },
 
       updateUser: (updates) => {
@@ -42,3 +63,4 @@ export const useAuthStore = create(
     }
   )
 );
+

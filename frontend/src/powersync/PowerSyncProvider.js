@@ -14,7 +14,8 @@ export function AppPowerSyncProvider({ children }) {
       return;
     }
 
-    const getToken = () => Promise.resolve(token);
+    // Lit toujours le token le plus frais depuis le store (après un refresh silencieux)
+    const getToken = () => Promise.resolve(useAuthStore.getState().token);
     connectorRef.current = new AppConnector(getToken);
 
     db.connect(connectorRef.current);
