@@ -1,13 +1,18 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity,
+  Image, ActivityIndicator, FlatList, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import {
   COLORS, FONTS, RADIUS, SPACING, STEP_TYPE, BOOKING_STATUS,
 } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
-import { useStep } from '../hooks/usePowerSync';
+import { useStep, useStepPhotos } from '../hooks/usePowerSync';
+import { useAuthStore } from '../store/authStore';
+import { localDeletePhoto } from '../powersync/localWrite';
+import API_URL from '../api/config';
 
 function InfoRow({ icon, label, value }) {
   if (!value) return null;
@@ -66,12 +71,91 @@ export default function StepDetailScreen({ route, navigation }) {
   const { stepId } = route.params;
   const { deleteActivity } = useRoadtripStore();
   const { step } = useStep(stepId);
+  const { photos: syncedPhotos } = useStepPhotos(stepId);
+  const token = useAuthStore((s) => s.token);
+  const [uploading, setUploading] = useState(false);
+  // Photos uploadées mais pas encore syncées par PowerSync — affichage immédiat
+  const [optimisticPhotos, setOptimisticPhotos] = useState([]);
+
+  // Fusion : photos PowerSync + optimistes (dédupliquer par id)
+  const photos = [
+    ...syncedPhotos,
+    ...optimisticPhotos.filter((op) => !syncedPhotos.find((sp) => sp.id === op.id)),
+  ];
+
+  // Nettoyer les optimistes quand PowerSync les a syncés
+  useEffect(() => {
+    if (optimisticPhotos.length === 0) return;
+    setOptimisticPhotos((prev) => prev.filter((op) => !syncedPhotos.find((sp) => sp.id === op.id)));
+  }, [syncedPhotos]);
 
   useEffect(() => {
     if (step?.name) {
       navigation.setOptions({ title: step.name });
     }
   }, [step?.name]);
+
+  const handleAddPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission refusée', "L'accès à la galerie est requis pour ajouter des photos.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    const formData = new FormData();
+    formData.append('photo', {
+      uri: asset.uri,
+      name: asset.fileName || `photo_${Date.now()}.jpg`,
+      type: asset.mimeType || 'image/jpeg',
+    });
+    formData.append('stepId', stepId);
+
+    setUploading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/photos/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errBody}`);
+      }
+      const uploaded = await res.json();
+      // Affichage immédiat — PowerSync synchro la copie serveur en arrière-plan
+      setOptimisticPhotos((prev) => [...prev, uploaded]);
+    } catch (err) {
+      console.error('[PHOTO UPLOAD]', err.message);
+      Alert.alert('Erreur upload', err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeletePhoto = (photo) => {
+    Alert.alert('Supprimer cette photo ?', null, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer',
+        style: 'destructive',
+        onPress: async () => {
+          // Suppression locale immédiate (PowerSync queue → backend quand réseau dispo)
+          await localDeletePhoto(photo.id);
+          // Nettoyer aussi les optimistes
+          setOptimisticPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+        },
+      },
+    ]);
+  };
 
   if (!step) {
     return (
@@ -151,6 +235,51 @@ export default function StepDetailScreen({ route, navigation }) {
             <Text style={styles.emptyText}>Aucune activité pour cette étape.</Text>
           )}
         </SectionCard>
+
+        {/* ─── Photos ─────────────────────────────────────────────────────── */}
+        <SectionCard title={`Photos (${photos.length})`}>
+          {photos.length > 0 ? (
+            <FlatList
+              data={photos}
+              keyExtractor={(p) => p.id}
+              numColumns={3}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.photoThumb}
+                  onLongPress={() => handleDeletePhoto(item)}
+                  activeOpacity={0.8}
+                >
+                  <Image source={{ uri: item.url }} style={styles.photoImage} />
+                </TouchableOpacity>
+              )}
+              ListFooterComponent={
+                <TouchableOpacity
+                  style={[styles.photoAdd, uploading && styles.photoAddDisabled]}
+                  onPress={uploading ? null : handleAddPhoto}
+                  activeOpacity={0.7}
+                >
+                  {uploading
+                    ? <ActivityIndicator color={COLORS.textMuted} />
+                    : <Text style={styles.photoAddIcon}>+</Text>}
+                </TouchableOpacity>
+              }
+            />
+          ) : (
+            <View style={styles.photosEmpty}>
+              <Text style={styles.emptyText}>Aucune photo pour cette étape.</Text>
+              <TouchableOpacity
+                style={[styles.photoAddLarge, uploading && styles.photoAddDisabled]}
+                onPress={uploading ? null : handleAddPhoto}
+                activeOpacity={0.7}
+              >
+                {uploading
+                  ? <ActivityIndicator color={COLORS.textMuted} />
+                  : <Text style={styles.photoAddIcon}>+ Ajouter une photo</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
+        </SectionCard>
       </ScrollView>
     </SafeAreaView>
   );
@@ -222,4 +351,36 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
   emptyText: { color: COLORS.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: SPACING.sm },
+  photosEmpty: { alignItems: 'center', gap: SPACING.sm },
+  photoThumb: {
+    width: (Dimensions.get('window').width - SPACING.lg * 2 - SPACING.md * 2 - 6) / 3,
+    aspectRatio: 1,
+    margin: 1,
+    borderRadius: RADIUS.sm,
+    overflow: 'hidden',
+    backgroundColor: COLORS.border,
+  },
+  photoImage: { width: '100%', height: '100%', resizeMode: 'cover' },
+  photoAdd: {
+    width: (Dimensions.get('window').width - SPACING.lg * 2 - SPACING.md * 2 - 6) / 3,
+    aspectRatio: 1,
+    margin: 1,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.textMuted,
+    borderStyle: 'dashed',
+  },
+  photoAddLarge: {
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.textMuted,
+    borderStyle: 'dashed',
+  },
+  photoAddDisabled: { opacity: 0.4 },
+  photoAddIcon: { color: COLORS.textMuted, fontSize: 22, fontWeight: '300' },
 });

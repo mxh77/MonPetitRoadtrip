@@ -5,7 +5,7 @@
 import { db } from './db';
 
 // Génère un ID type CUID localement (sans dépendance externe)
-const generateId = () =>
+export const generateId = () =>
   'c' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 
 const now = () => new Date().toISOString();
@@ -117,6 +117,20 @@ export async function localCreateActivity({
 
 export async function localDeleteActivity(id) {
   await db.execute('DELETE FROM activities WHERE id = ?', [id]);
+}
+
+// ─── Photos ───────────────────────────────────────────────────────────────────
+
+export async function localInsertPhoto({ id, url, stepId, roadtripId, accommodationId, activityId, userId, createdAt }) {
+  await db.execute(
+    `INSERT INTO photos (id, url, stepId, roadtripId, accommodationId, activityId, userId, createdAt, isPending)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [id, url, stepId ?? null, roadtripId ?? null, accommodationId ?? null, activityId ?? null, userId, createdAt ?? new Date().toISOString()]
+  );
+}
+
+export async function localDeletePhoto(id) {
+  await db.execute('DELETE FROM photos WHERE id = ?', [id]);
 }
 
 // ─── Accommodations ───────────────────────────────────────────────────────────

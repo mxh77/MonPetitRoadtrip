@@ -8,6 +8,7 @@ const roadtripRoutes = require('./routes/roadtrips');
 const stepRoutes = require('./routes/steps');
 const activityRoutes = require('./routes/activities');
 const accommodationRoutes = require('./routes/accommodations');
+const photoRoutes = require('./routes/photos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,7 +21,7 @@ app.use(express.json());
 app.use((req, res, next) => {
   const start = Date.now();
   const isSync = ['PUT', 'PATCH', 'DELETE'].includes(req.method) &&
-    /^\/(roadtrips|steps|activities|accommodations)/.test(req.path.replace('/api/', ''));
+    /^\/(roadtrips|steps|activities|accommodations|photos)/.test(req.path.replace('/api/', ''));
 
   res.on('finish', () => {
     const ms = Date.now() - start;
@@ -43,6 +44,7 @@ app.use('/api/roadtrips', roadtripRoutes);
 app.use('/api/steps', stepRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/accommodations', accommodationRoutes);
+app.use('/api/photos', photoRoutes);
 
 // 404 handler
 app.use((req, res) => {

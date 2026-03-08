@@ -102,3 +102,16 @@ export function useStep(stepId) {
       : null,
   };
 }
+
+/**
+ * Retourne les photos d'un step — lecture réactive PowerSync (offline-first).
+ */
+export function useStepPhotos(stepId) {
+  const { data } = useQuery(
+    stepId
+      ? 'SELECT * FROM photos WHERE stepId = ? ORDER BY createdAt ASC'
+      : 'SELECT * FROM photos WHERE 1=0',
+    stepId ? [stepId] : []
+  );
+  return { photos: data ?? [] };
+}

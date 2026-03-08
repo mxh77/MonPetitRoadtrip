@@ -43,6 +43,55 @@ export class AppConnector {
       const { op, table, id, opData } = entry;
       const url = `${API_URL}/api/${table}/${id}`;
 
+      // ─── Photos : upload binaire offline-first ─────────────────────────────
+      if (table === 'photos') {
+        if (op === 'PUT' && (opData.isPending === 1 || opData.isPending === '1')) {
+          try {
+            const formData = new FormData();
+            formData.append('photo', { uri: opData.url, name: `photo_${id}.jpg`, type: 'image/jpeg' });
+            formData.append('id', id);
+            if (opData.stepId)          formData.append('stepId', opData.stepId);
+            if (opData.roadtripId)      formData.append('roadtripId', opData.roadtripId);
+            if (opData.accommodationId) formData.append('accommodationId', opData.accommodationId);
+            if (opData.activityId)      formData.append('activityId', opData.activityId);
+            const photoRes = await fetch(`${API_URL}/api/photos/upload`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+              body: formData,
+            });
+            if (photoRes.ok) {
+              const uploaded = await photoRes.json();
+              await database.execute(
+                'UPDATE photos SET url = ?, isPending = 0 WHERE id = ?',
+                [uploaded.url, id]
+              );
+            } else if (photoRes.status !== 404) {
+              await batch.cancel();
+              return;
+            }
+          } catch {
+            await batch.cancel();
+            return;
+          }
+        } else if (op === 'DELETE') {
+          try {
+            const delRes = await fetch(`${API_URL}/api/photos/${id}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!delRes.ok && delRes.status !== 404) {
+              await batch.cancel();
+              return;
+            }
+          } catch {
+            await batch.cancel();
+            return;
+          }
+        }
+        // PUT avec isPending=0 (post-upload) : serveur déjà à jour via le POST → skip
+        continue;
+      }
+
       try {
         let method, body;
         if (op === 'PUT') {

@@ -237,7 +237,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
       {selectedStep && (
         <TouchableOpacity
           style={[styles.infoPanel, { bottom: 170 + Math.max(bottom, 12) }]}
-          onPress={() => navigation.navigate('StepDetail', { stepId: selectedStep.id })}
+          onPress={() => navigation.navigate('EditStep', { step: selectedStep })}
           activeOpacity={0.85}
         >
           <View style={styles.infoPanelInner}>
@@ -264,14 +264,6 @@ export default function RoadtripDetailScreen({ route, navigation }) {
                   {`🎯 ${selectedStep.activities.length} activité${selectedStep.activities.length > 1 ? 's' : ''}`}
                 </Text>
               </>)}
-            </View>
-            <View style={styles.infoPanelActions}>
-              <TouchableOpacity
-                style={styles.infoPanelBtn}
-                onPress={(e) => { e.stopPropagation(); navigation.navigate('EditStep', { step: selectedStep }); }}
-              >
-                <Text style={styles.infoPanelBtnText}>✏️</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>

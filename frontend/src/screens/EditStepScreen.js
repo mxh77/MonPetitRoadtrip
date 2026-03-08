@@ -2,12 +2,19 @@ import React, { useState, useLayoutEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, Modal, Platform,
+  Image, Dimensions,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, STEP_TYPE } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
+import { useAuthStore } from '../store/authStore';
+import { useStepPhotos } from '../hooks/usePowerSync';
+import { localDeletePhoto, localInsertPhoto, generateId } from '../powersync/localWrite';
 import LocationPicker from '../components/LocationPicker';
+
+const { width: SCREEN_W } = Dimensions.get('window');
 
 const TYPES = Object.entries(STEP_TYPE);
 
@@ -40,6 +47,38 @@ export default function EditStepScreen({ route, navigation }) {
   const [pickerTemp, setPickerTemp] = useState(new Date());
 
   const { updateStep } = useRoadtripStore();
+  const userId = useAuthStore((s) => s.user?.id);
+  const { photos } = useStepPhotos(step.id);
+
+  const handleAddPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission refusée', "L'accès à la galerie est requis pour ajouter des photos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+      allowsEditing: false,
+    });
+    if (result.canceled) return;
+    const asset = result.assets[0];
+    // Insertion locale immédiate — PowerSync gère l'upload binaire quand le réseau revient
+    await localInsertPhoto({
+      id: generateId(),
+      url: asset.uri,
+      stepId: step.id,
+      userId,
+      createdAt: new Date().toISOString(),
+    });
+  };
+
+  const handleDeletePhoto = (photo) => {
+    Alert.alert('Supprimer cette photo ?', null, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => localDeletePhoto(photo.id) },
+    ]);
+  };
 
   const openPicker = (target) => {
     setPickerTarget(target);
@@ -190,7 +229,25 @@ export default function EditStepScreen({ route, navigation }) {
           />
         </View>
 
-
+        {/* ─── Photos ──────────────────────────────────────────────────────── */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Photos</Text>
+          <View style={styles.photoGrid}>
+            {photos.map((photo) => (
+              <TouchableOpacity
+                key={photo.id}
+                onLongPress={() => handleDeletePhoto(photo)}
+                activeOpacity={0.8}
+                style={styles.photoItem}
+              >
+                <Image source={{ uri: photo.url }} style={styles.photoThumb} resizeMode="cover" />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={handleAddPhoto} style={styles.photoAdd}>
+              <Text style={styles.photoAddText}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
       </ScrollView>
 
@@ -295,6 +352,11 @@ const styles = StyleSheet.create({
   pickerTitle: { fontFamily: FONTS.titleRegular, fontSize: 16, color: COLORS.text },
   pickerCancel: { color: COLORS.textDim, fontSize: 15 },
   pickerConfirm: { color: COLORS.accent, fontSize: 15, fontWeight: '700' },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  photoItem: { width: (SCREEN_W - SPACING.lg * 2 - 16) / 3, aspectRatio: 1, borderRadius: RADIUS.sm, overflow: 'hidden' },
+  photoThumb: { width: '100%', height: '100%' },
+  photoAdd: { width: (SCREEN_W - SPACING.lg * 2 - 16) / 3, aspectRatio: 1, borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  photoAddText: { fontSize: 28, color: COLORS.textDim, lineHeight: 32 },
   typePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   typeBtn: {
     flexDirection: 'row',

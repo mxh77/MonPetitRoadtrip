@@ -22,6 +22,8 @@ model User {
   steps          Step[]
   accommodations Accommodation[]
   activities     Activity[]
+  photos         Photo[]
+
 
   @@map("users")
 }
@@ -38,7 +40,6 @@ model Roadtrip {
   userId        String
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   steps         Step[]
-  photos        Photo[]
 
   @@map("roadtrips")
 }
@@ -72,7 +73,6 @@ model Step {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   accommodation Accommodation?
   activities    Activity[]
-  photos        Photo[]
 
   @@map("steps")
 }
@@ -154,16 +154,20 @@ enum BookingStatus {
 }
 
 model Photo {
-  id           String    @id @default(cuid())
-  url          String
-  cloudinaryId String?
-  isCover      Boolean   @default(false)
-  takenAt      DateTime?
-  createdAt    DateTime  @default(now())
-  roadtripId   String?
-  roadtrip     Roadtrip? @relation(fields: [roadtripId], references: [id], onDelete: Cascade)
-  stepId       String?
-  step         Step?     @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  id              String         @id @default(cuid())
+  url             String
+  cloudinaryId    String?
+  name            String?
+  caption         String?
+  isCover         Boolean        @default(false)
+  takenAt         DateTime?
+  createdAt       DateTime       @default(now())
+  userId          String
+  roadtripId      String?
+  stepId          String?
+  accommodationId String?
+  activityId      String?
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("photos")
 }

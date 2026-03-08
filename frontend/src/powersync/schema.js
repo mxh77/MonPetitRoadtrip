@@ -67,9 +67,24 @@ const activities = new Table({
   userId: column.text,
 });
 
+const photos = new Table({
+  url: column.text,
+  cloudinaryId: column.text,
+  caption: column.text,
+  isCover: column.integer,
+  isPending: column.integer,
+  stepId: column.text,
+  roadtripId: column.text,
+  accommodationId: column.text,
+  activityId: column.text,
+  userId: column.text,
+  createdAt: column.text,
+});
+
 export const AppSchema = new Schema({
   roadtrips,
   steps,
   accommodations,
   activities,
+  photos,
 });
