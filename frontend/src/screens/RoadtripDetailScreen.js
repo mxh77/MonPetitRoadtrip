@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useState, useRef, Component } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, Pressable, Modal, StatusBar, Dimensions,
+  Alert, ActivityIndicator, Pressable, Modal, StatusBar, Dimensions, Image,
 } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -79,7 +79,11 @@ function StepCard({ step, active, dayNum, onPress }) {
   return (
     <TouchableOpacity onPress={onPress} style={styles.card} activeOpacity={0.8}>
       <View style={[styles.cardCircle, { backgroundColor: bg }, active && styles.cardCircleActive]}>
-        <Text style={styles.cardInitials}>{initials}</Text>
+        {step.photoUrl ? (
+          <Image source={{ uri: step.photoUrl }} style={styles.cardPhoto} resizeMode="cover" />
+        ) : (
+          <Text style={styles.cardInitials}>{initials}</Text>
+        )}
       </View>
       {dayNum != null && (
         <Text style={[styles.cardDay, active && styles.cardDayActive]}>J{dayNum}</Text>
@@ -410,6 +414,7 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
   },
   cardInitials: { fontFamily: FONTS.title, fontSize: 17, color: '#fff' },
+  cardPhoto: { width: '100%', height: '100%', borderRadius: 24 },
   cardDay: { fontSize: 9, color: 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: 5, letterSpacing: 0.5 },
   cardDayActive: { color: COLORS.accent },
   cardName: { fontSize: 10, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 2, lineHeight: 13 },

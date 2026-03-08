@@ -65,6 +65,13 @@ export class AppConnector {
                 'UPDATE photos SET url = ?, isPending = 0 WHERE id = ?',
                 [uploaded.url, id]
               );
+              // Si l'URI locale était la photo de carte de l'étape, mettre à jour step.photoUrl
+              if (opData.stepId && opData.url && opData.url !== uploaded.url) {
+                await database.execute(
+                  'UPDATE steps SET photoUrl = ? WHERE id = ? AND photoUrl = ?',
+                  [uploaded.url, opData.stepId, opData.url]
+                );
+              }
             } else if (photoRes.status !== 404) {
               await batch.cancel();
               return;

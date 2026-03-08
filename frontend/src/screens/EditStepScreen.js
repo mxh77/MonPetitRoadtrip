@@ -2,7 +2,7 @@ import React, { useState, useLayoutEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator, Modal, Platform,
-  Image, Dimensions,
+  Image, Dimensions, Pressable,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -50,6 +50,44 @@ export default function EditStepScreen({ route, navigation }) {
   const userId = useAuthStore((s) => s.user?.id);
   const { photos } = useStepPhotos(step.id);
 
+  // URL de la photo de carte — état local pour éviter les re-renders intermédiaires de PowerSync
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState(step.photoUrl ?? null);
+
+  // Photo action menu
+  const [photoMenuVisible, setPhotoMenuVisible] = useState(false);
+  const [menuPhoto, setMenuPhoto] = useState(null);
+
+  const openPhotoMenu = (photo) => {
+    setMenuPhoto(photo);
+    setPhotoMenuVisible(true);
+  };
+
+  const handleSetAsCover = async () => {
+    setPhotoMenuVisible(false);
+    const url = menuPhoto.url;
+    setCoverPhotoUrl(url);
+    await updateStep(step.id, { photoUrl: url });
+  };
+
+  const handleDeletePhotoConfirmed = async (photo) => {
+    // Si c'était la photo de carte, on efface step.photoUrl
+    if (photo.url === coverPhotoUrl) {
+      setCoverPhotoUrl(null);
+      await updateStep(step.id, { photoUrl: null });
+    }
+    await localDeletePhoto(photo.id);
+  };
+
+  const handleDeletePhotoFromMenu = () => {
+    setPhotoMenuVisible(false);
+    const photo = menuPhoto;
+    Alert.alert('Supprimer cette photo ?', null, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => handleDeletePhotoConfirmed(photo) },
+    ]);
+  };
+
+  // Garde la fonction pour compatibilité (plus utilisée directement depuis le grid)
   const handleAddPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -236,11 +274,21 @@ export default function EditStepScreen({ route, navigation }) {
             {photos.map((photo) => (
               <TouchableOpacity
                 key={photo.id}
-                onLongPress={() => handleDeletePhoto(photo)}
+                onLongPress={() => openPhotoMenu(photo)}
                 activeOpacity={0.8}
-                style={styles.photoItem}
+                style={[
+                  styles.photoItem,
+                  photo.url === coverPhotoUrl && styles.photoItemCover,
+                ]}
               >
-                <Image source={{ uri: photo.url }} style={styles.photoThumb} resizeMode="cover" />
+                <View style={styles.photoClip}>
+                  <Image source={{ uri: photo.url }} style={styles.photoThumb} resizeMode="cover" />
+                  {photo.url === coverPhotoUrl && (
+                    <View style={styles.coverBadge}>
+                      <Text style={styles.coverBadgeText}>★</Text>
+                    </View>
+                  )}
+                </View>
               </TouchableOpacity>
             ))}
             <TouchableOpacity onPress={handleAddPhoto} style={styles.photoAdd}>
@@ -280,6 +328,25 @@ export default function EditStepScreen({ route, navigation }) {
           </View>
         </Modal>
       )}
+
+      {/* ─── Photo action menu ─────────────────────────────────────────── */}
+      <Modal visible={photoMenuVisible} transparent animationType="slide" onRequestClose={() => setPhotoMenuVisible(false)}>
+        <Pressable style={styles.photoMenuOverlay} onPress={() => setPhotoMenuVisible(false)}>
+          <Pressable style={styles.photoMenuSheet} onPress={() => {}}>
+            <View style={styles.photoMenuHandle} />
+            <Text style={styles.photoMenuTitle}>Photo</Text>
+            <TouchableOpacity style={styles.photoMenuItem} onPress={handleSetAsCover}>
+              <Text style={styles.photoMenuIcon}>🖼</Text>
+              <Text style={styles.photoMenuLabel}>Définir comme photo de carte</Text>
+            </TouchableOpacity>
+            <View style={styles.photoMenuDivider} />
+            <TouchableOpacity style={styles.photoMenuItem} onPress={handleDeletePhotoFromMenu}>
+              <Text style={styles.photoMenuIcon}>🗑</Text>
+              <Text style={styles.photoMenuLabelDanger}>Supprimer cette photo</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Android : picker direct */}
       {Platform.OS === 'android' && pickerVisible && (
@@ -353,10 +420,33 @@ const styles = StyleSheet.create({
   pickerCancel: { color: COLORS.textDim, fontSize: 15 },
   pickerConfirm: { color: COLORS.accent, fontSize: 15, fontWeight: '700' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  photoItem: { width: (SCREEN_W - SPACING.lg * 2 - 16) / 3, aspectRatio: 1, borderRadius: RADIUS.sm, overflow: 'hidden' },
+  photoItem: { width: (SCREEN_W - SPACING.lg * 2 - 16) / 3, aspectRatio: 1, borderRadius: RADIUS.sm },
+  photoItemCover: { borderWidth: 2.5, borderColor: COLORS.accent },
+  photoClip: { flex: 1, borderRadius: RADIUS.sm, overflow: 'hidden' },
   photoThumb: { width: '100%', height: '100%' },
+  coverBadge: {
+    position: 'absolute', bottom: 3, right: 3,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1,
+  },
+  coverBadgeText: { color: COLORS.accent, fontSize: 11, fontWeight: '700' },
   photoAdd: { width: (SCREEN_W - SPACING.lg * 2 - 16) / 3, aspectRatio: 1, borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   photoAddText: { fontSize: 28, color: COLORS.textDim, lineHeight: 32 },
+  // Photo action sheet
+  photoMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  photoMenuSheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,
+    paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.lg,
+    borderTopWidth: 1, borderColor: COLORS.border,
+  },
+  photoMenuHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: SPACING.md },
+  photoMenuTitle: { fontFamily: FONTS.title, fontSize: 18, color: COLORS.text, marginBottom: SPACING.md },
+  photoMenuDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: SPACING.xs },
+  photoMenuItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: SPACING.md },
+  photoMenuIcon: { fontSize: 20, width: 28, textAlign: 'center' },
+  photoMenuLabel: { fontSize: 15, color: COLORS.text, fontWeight: '600' },
+  photoMenuLabelDanger: { fontSize: 15, color: COLORS.error, fontWeight: '600' },
   typePicker: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   typeBtn: {
     flexDirection: 'row',
