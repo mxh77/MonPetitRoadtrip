@@ -1,10 +1,11 @@
 const router = require('express').Router();
 const prisma = require('../lib/prisma');
 const auth = require('../middleware/auth');
+const { getUserRoleViaStep } = require('../lib/roleHelpers');
 
 router.use(auth);
 
-// POST /api/accommodations
+// POST /api/accommodations — écriture : EDITOR+
 router.post('/', async (req, res) => {
   const { stepId, type, name, address, checkIn, checkOut, bookingRef, bookingUrl, pricePerNight, currency, notes, status } = req.body;
 
@@ -12,14 +13,9 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'stepId and name are required' });
   }
 
-  const step = await prisma.step.findFirst({
-    where: { id: stepId },
-    include: { roadtrip: true },
-  });
-
-  if (!step || step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Step not found' });
-  }
+  const role = await getUserRoleViaStep(stepId, req.user.userId);
+  if (!role) return res.status(404).json({ error: 'Step not found' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   // Check no accommodation already exists for this step
   const existing = await prisma.accommodation.findUnique({ where: { stepId } });
@@ -48,9 +44,15 @@ router.post('/', async (req, res) => {
   res.status(201).json(accommodation);
 });
 
-// PUT /api/accommodations/:id — upsert (ID généré côté client)
+// PUT /api/accommodations/:id — upsert (EDITOR+, ID généré côté client)
 router.put('/:id', async (req, res) => {
   const { stepId, type, name, address, checkIn, checkOut, bookingRef, bookingUrl, pricePerNight, currency, notes, status } = req.body;
+
+  if (!stepId) return res.status(400).json({ error: 'stepId is required' });
+
+  const role = await getUserRoleViaStep(stepId, req.user.userId);
+  if (!role) return res.status(404).json({ error: 'Step not found' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const accommodation = await prisma.accommodation.upsert({
     where: { id: req.params.id },
@@ -88,16 +90,18 @@ router.put('/:id', async (req, res) => {
   res.json(accommodation);
 });
 
-// PATCH /api/accommodations/:id
+// PATCH /api/accommodations/:id — modification partielle (EDITOR+)
 router.patch('/:id', async (req, res) => {
   const accommodation = await prisma.accommodation.findFirst({
     where: { id: req.params.id },
-    include: { step: { include: { roadtrip: true } } },
+    select: { stepId: true },
   });
 
-  if (!accommodation || accommodation.step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Accommodation not found' });
-  }
+  if (!accommodation) return res.status(404).json({ error: 'Accommodation not found' });
+
+  const role = await getUserRoleViaStep(accommodation.stepId, req.user.userId);
+  if (!role) return res.status(403).json({ error: 'Access denied' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const { type, name, address, checkIn, checkOut, bookingRef, bookingUrl, pricePerNight, currency, notes, status } = req.body;
 
@@ -121,16 +125,18 @@ router.patch('/:id', async (req, res) => {
   res.json(updated);
 });
 
-// DELETE /api/accommodations/:id
+// DELETE /api/accommodations/:id — suppression (EDITOR+)
 router.delete('/:id', async (req, res) => {
   const accommodation = await prisma.accommodation.findFirst({
     where: { id: req.params.id },
-    include: { step: { include: { roadtrip: true } } },
+    select: { stepId: true },
   });
 
-  if (!accommodation || accommodation.step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Accommodation not found' });
-  }
+  if (!accommodation) return res.status(404).json({ error: 'Accommodation not found' });
+
+  const role = await getUserRoleViaStep(accommodation.stepId, req.user.userId);
+  if (!role) return res.status(403).json({ error: 'Access denied' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   await prisma.accommodation.delete({ where: { id: req.params.id } });
 

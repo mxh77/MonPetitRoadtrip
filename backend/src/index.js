@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const authRoutes = require('./routes/auth');
 const roadtripRoutes = require('./routes/roadtrips');
+const memberRoutes = require('./routes/members');
 const stepRoutes = require('./routes/steps');
 const activityRoutes = require('./routes/activities');
 const accommodationRoutes = require('./routes/accommodations');
@@ -40,6 +41,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/roadtrips', memberRoutes);
 app.use('/api/roadtrips', roadtripRoutes);
 app.use('/api/steps', stepRoutes);
 app.use('/api/activities', activityRoutes);

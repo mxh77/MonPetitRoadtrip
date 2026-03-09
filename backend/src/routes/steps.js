@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../lib/prisma');
 const auth = require('../middleware/auth');
+const { getUserRoleOnRoadtrip } = require('../lib/roleHelpers');
 
 router.use(auth);
 
@@ -12,13 +13,9 @@ router.get('/', async (req, res) => {
     return res.status(400).json({ error: 'roadtripId query param is required' });
   }
 
-  // Verify the roadtrip belongs to the user
-  const roadtrip = await prisma.roadtrip.findFirst({
-    where: { id: roadtripId, userId: req.user.userId },
-  });
-
-  if (!roadtrip) {
-    return res.status(404).json({ error: 'Roadtrip not found' });
+  const role = await getUserRoleOnRoadtrip(roadtripId, req.user.userId);
+  if (!role) {
+    return res.status(403).json({ error: 'Access denied' });
   }
 
   const steps = await prisma.step.findMany({
@@ -33,7 +30,7 @@ router.get('/', async (req, res) => {
   res.json(steps);
 });
 
-// POST /api/steps
+// POST /api/steps — écriture : EDITOR+
 router.post('/', async (req, res) => {
   const {
     roadtripId, type, name, location, latitude, longitude,
@@ -44,13 +41,9 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'roadtripId, type and name are required' });
   }
 
-  const roadtrip = await prisma.roadtrip.findFirst({
-    where: { id: roadtripId, userId: req.user.userId },
-  });
-
-  if (!roadtrip) {
-    return res.status(404).json({ error: 'Roadtrip not found' });
-  }
+  const role = await getUserRoleOnRoadtrip(roadtripId, req.user.userId);
+  if (!role) return res.status(404).json({ error: 'Roadtrip not found' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const step = await prisma.step.create({
     data: {
@@ -75,12 +68,18 @@ router.post('/', async (req, res) => {
   res.status(201).json(step);
 });
 
-// PUT /api/steps/:id — upsert (ID généré côté client)
+// PUT /api/steps/:id — upsert (EDITOR+, ID généré côté client)
 router.put('/:id', async (req, res) => {
   const {
     roadtripId, type, name, location, latitude, longitude,
     startDate, endDate, arrivalTime, departureTime, notes, photoUrl, order,
   } = req.body;
+
+  if (!roadtripId) return res.status(400).json({ error: 'roadtripId is required' });
+
+  const role = await getUserRoleOnRoadtrip(roadtripId, req.user.userId);
+  if (!role) return res.status(404).json({ error: 'Roadtrip not found' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const step = await prisma.step.upsert({
     where: { id: req.params.id },
@@ -121,16 +120,18 @@ router.put('/:id', async (req, res) => {
   res.json(step);
 });
 
-// PATCH /api/steps/:id
+// PATCH /api/steps/:id — modification partielle (EDITOR+)
 router.patch('/:id', async (req, res) => {
   const step = await prisma.step.findFirst({
     where: { id: req.params.id },
-    include: { roadtrip: true },
+    select: { roadtripId: true },
   });
 
-  if (!step || step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Step not found' });
-  }
+  if (!step) return res.status(404).json({ error: 'Step not found' });
+
+  const role = await getUserRoleOnRoadtrip(step.roadtripId, req.user.userId);
+  if (!role) return res.status(403).json({ error: 'Access denied' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const {
     type, name, location, latitude, longitude,
@@ -159,16 +160,18 @@ router.patch('/:id', async (req, res) => {
   res.json(updated);
 });
 
-// DELETE /api/steps/:id
+// DELETE /api/steps/:id — suppression (EDITOR+)
 router.delete('/:id', async (req, res) => {
   const step = await prisma.step.findFirst({
     where: { id: req.params.id },
-    include: { roadtrip: true },
+    select: { roadtripId: true },
   });
 
-  if (!step || step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Step not found' });
-  }
+  if (!step) return res.status(404).json({ error: 'Step not found' });
+
+  const role = await getUserRoleOnRoadtrip(step.roadtripId, req.user.userId);
+  if (!role) return res.status(403).json({ error: 'Access denied' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   await prisma.step.delete({ where: { id: req.params.id } });
 

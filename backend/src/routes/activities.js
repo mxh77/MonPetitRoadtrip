@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const prisma = require('../lib/prisma');
 const auth = require('../middleware/auth');
+const { getUserRoleViaStep } = require('../lib/roleHelpers');
 
 router.use(auth);
 
@@ -12,12 +13,8 @@ router.get('/', async (req, res) => {
     return res.status(400).json({ error: 'stepId query param is required' });
   }
 
-  const step = await prisma.step.findFirst({
-    where: { id: stepId },
-    include: { roadtrip: true },
-  });
-
-  if (!step || step.roadtrip.userId !== req.user.userId) {
+  const role = await getUserRoleViaStep(stepId, req.user.userId);
+  if (!role) {
     return res.status(404).json({ error: 'Step not found' });
   }
 
@@ -29,7 +26,7 @@ router.get('/', async (req, res) => {
   res.json(activities);
 });
 
-// POST /api/activities
+// POST /api/activities — écriture : EDITOR+
 router.post('/', async (req, res) => {
   const { stepId, type, name, location, startTime, endTime, bookingRef, bookingUrl, cost, currency, notes, status, order } = req.body;
 
@@ -37,14 +34,9 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'stepId and name are required' });
   }
 
-  const step = await prisma.step.findFirst({
-    where: { id: stepId },
-    include: { roadtrip: true },
-  });
-
-  if (!step || step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Step not found' });
-  }
+  const role = await getUserRoleViaStep(stepId, req.user.userId);
+  if (!role) return res.status(404).json({ error: 'Step not found' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const activity = await prisma.activity.create({
     data: {
@@ -68,9 +60,15 @@ router.post('/', async (req, res) => {
   res.status(201).json(activity);
 });
 
-// PUT /api/activities/:id — upsert (ID généré côté client)
+// PUT /api/activities/:id — upsert (EDITOR+, ID généré côté client)
 router.put('/:id', async (req, res) => {
   const { stepId, type, name, location, startTime, endTime, bookingRef, bookingUrl, cost, currency, notes, status, order } = req.body;
+
+  if (!stepId) return res.status(400).json({ error: 'stepId is required' });
+
+  const role = await getUserRoleViaStep(stepId, req.user.userId);
+  if (!role) return res.status(404).json({ error: 'Step not found' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const activity = await prisma.activity.upsert({
     where: { id: req.params.id },
@@ -110,16 +108,18 @@ router.put('/:id', async (req, res) => {
   res.json(activity);
 });
 
-// PATCH /api/activities/:id
+// PATCH /api/activities/:id — modification partielle (EDITOR+)
 router.patch('/:id', async (req, res) => {
   const activity = await prisma.activity.findFirst({
     where: { id: req.params.id },
-    include: { step: { include: { roadtrip: true } } },
+    select: { stepId: true },
   });
 
-  if (!activity || activity.step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Activity not found' });
-  }
+  if (!activity) return res.status(404).json({ error: 'Activity not found' });
+
+  const role = await getUserRoleViaStep(activity.stepId, req.user.userId);
+  if (!role) return res.status(403).json({ error: 'Access denied' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   const { type, name, location, startTime, endTime, bookingRef, bookingUrl, cost, currency, notes, status, order } = req.body;
 
@@ -144,16 +144,18 @@ router.patch('/:id', async (req, res) => {
   res.json(updated);
 });
 
-// DELETE /api/activities/:id
+// DELETE /api/activities/:id — suppression (EDITOR+)
 router.delete('/:id', async (req, res) => {
   const activity = await prisma.activity.findFirst({
     where: { id: req.params.id },
-    include: { step: { include: { roadtrip: true } } },
+    select: { stepId: true },
   });
 
-  if (!activity || activity.step.roadtrip.userId !== req.user.userId) {
-    return res.status(404).json({ error: 'Activity not found' });
-  }
+  if (!activity) return res.status(404).json({ error: 'Activity not found' });
+
+  const role = await getUserRoleViaStep(activity.stepId, req.user.userId);
+  if (!role) return res.status(403).json({ error: 'Access denied' });
+  if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
   await prisma.activity.delete({ where: { id: req.params.id } });
 

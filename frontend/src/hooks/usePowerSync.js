@@ -1,15 +1,21 @@
 import { useQuery } from '@powersync/react-native';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
+import API_URL from '../api/config';
 
 /**
- * Retourne tous les roadtrips de l'utilisateur connecté.
- * Réactif : se met à jour automatiquement quand la DB locale change.
+ * Retourne tous les roadtrips de l'utilisateur connecté (owned + shared).
+ * Réactif pour les roadtrips owned (PowerSync), fetch REST pour les partagés.
  */
 export function useRoadtrips() {
   const userId = useAuthStore((s) => s.user?.id);
-  const { data, isLoading, error } = useQuery(
+  const token = useAuthStore((s) => s.token);
+  const [sharedRoadtrips, setSharedRoadtrips] = useState([]);
+
+  // Roadtrips dont l'utilisateur est OWNER (depuis PowerSync local)
+  const { data: ownedData, isLoading } = useQuery(
     userId
-      ? `SELECT r.*, COUNT(s.id) as stepCount
+      ? `SELECT r.*, COUNT(s.id) as stepCount, 'OWNER' as userRole
          FROM roadtrips r
          LEFT JOIN steps s ON s.roadtripId = r.id
          WHERE r.userId = ?
@@ -18,7 +24,27 @@ export function useRoadtrips() {
       : 'SELECT * FROM roadtrips WHERE 1=0',
     userId ? [userId] : []
   );
-  return { roadtrips: data ?? [], isLoading, error };
+
+  // Roadtrips partagés — fetch REST (non PowerSync car hors scope de sync)
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_URL}/api/roadtrips`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(all => {
+        const shared = all.filter(r => r.userRole !== 'OWNER');
+        setSharedRoadtrips(shared.map(r => ({ ...r, stepCount: r.steps?.length ?? 0 })));
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const owned = ownedData ?? [];
+  const ownedIds = new Set(owned.map(r => r.id));
+  const uniqueShared = sharedRoadtrips.filter(r => !ownedIds.has(r.id));
+  const roadtrips = [...owned, ...uniqueShared].sort((a, b) =>
+    new Date(b.createdAt) - new Date(a.createdAt)
+  );
+
+  return { roadtrips, isLoading };
 }
 
 /**

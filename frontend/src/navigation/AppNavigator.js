@@ -12,6 +12,7 @@ import StepDetailScreen from '../screens/StepDetailScreen';
 import CreateStepScreen from '../screens/CreateStepScreen';
 import EditRoadtripScreen from '../screens/EditRoadtripScreen';
 import EditStepScreen from '../screens/EditStepScreen';
+import CollaboratorsScreen from '../screens/CollaboratorsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -73,6 +74,11 @@ export default function AppNavigator() {
               name="EditStep"
               component={EditStepScreen}
               options={{ title: "Modifier l'étape", headerShown: true }}
+            />
+            <Stack.Screen
+              name="Collaborators"
+              component={CollaboratorsScreen}
+              options={{ headerShown: false }}
             />
           </>
         )}
