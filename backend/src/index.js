@@ -11,6 +11,7 @@ const activityRoutes = require('./routes/activities');
 const accommodationRoutes = require('./routes/accommodations');
 const photoRoutes = require('./routes/photos');
 const invitationRoutes = require('./routes/invitations');
+const betaRoutes = require('./routes/beta');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,6 +50,7 @@ app.use('/api/activities', activityRoutes);
 app.use('/api/accommodations', accommodationRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/invitations', invitationRoutes);
+app.use('/api/beta', betaRoutes);
 
 // 404 handler
 app.use((req, res) => {

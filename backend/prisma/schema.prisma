@@ -25,6 +25,7 @@ model User {
   photos         Photo[]
   refreshTokens  RefreshToken[]
   memberships    RoadtripMember[]
+  betaFeedbacks  BetaFeedback[]
 
   @@map("users")
 }
@@ -214,4 +215,15 @@ enum InviteStatus {
   PENDING
   ACCEPTED
   DECLINED
+}
+
+model BetaFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  text      String
+  audioUrl  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("beta_feedbacks")
 }
