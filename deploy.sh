@@ -63,7 +63,7 @@ else
 
   scp -r "$LOCAL_DIR/prisma" "$SERVER:$REMOTE_DIR/"
 
-  ssh "$SERVER" "pm2 restart monpetitroadtrip-api --update-env" &>/dev/null
+  ssh "$SERVER" "cd $REMOTE_DIR && npm install --omit=dev && npx prisma generate && pm2 restart monpetitroadtrip-api --update-env" &>/dev/null
 
   sleep 1
   STATUS=$(ssh "$SERVER" "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health")
