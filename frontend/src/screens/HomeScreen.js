@@ -12,6 +12,7 @@ import { useAuthStore } from '../store/authStore';
 import { useRoadtrips } from '../hooks/usePowerSync';
 import { db } from '../powersync/db';
 import { AppConnector } from '../powersync/connector';
+import BetaFeedbackModal from '../components/BetaFeedbackModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -280,6 +281,7 @@ export default function HomeScreen({ navigation }) {
   const { roadtrips, isLoading, refreshShared } = useRoadtrips();
   const [menuVisible, setMenuVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [feedbackVisible, setFeedbackVisible] = useState(false);
 
   // Rafraîchir les roadtrips partagés à chaque focus de l'écran
   useFocusEffect(
@@ -409,6 +411,11 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
 
+      {/* ─── Beta FAB ─────────────────────────────────────────────────────── */}
+      <TouchableOpacity style={[styles.betaFab, { bottom: tabBarHeight + 12 }]} onPress={() => setFeedbackVisible(true)}>
+        <Text style={styles.betaFabText}>🎤</Text>
+      </TouchableOpacity>
+
       {/* ─── Tab bar ──────────────────────────────────────────────────────── */}
       <TabBar active="home" />
 
@@ -418,6 +425,9 @@ export default function HomeScreen({ navigation }) {
         onClose={() => setMenuVisible(false)}
         onLogout={() => { setMenuVisible(false); logout(); }}
       />
+
+      {/* ─── Beta Feedback Modal ───────────────────────────────────────────── */}
+      <BetaFeedbackModal visible={feedbackVisible} onClose={() => setFeedbackVisible(false)} />
     </SafeAreaView>
   );
 }
@@ -562,4 +572,17 @@ const styles = StyleSheet.create({
     shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
   },
   fabText: { color: COLORS.bg, fontSize: 26, fontWeight: '300', lineHeight: 30 },
+
+  // Beta FAB
+  betaFab: {
+    position: 'absolute',
+    bottom: 78, // overridden dynamically
+    left: SPACING.lg,
+    width: 40, height: 40, borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceElevated,
+    borderWidth: 1, borderColor: COLORS.border,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
+  betaFabText: { fontSize: 18 },
 });
