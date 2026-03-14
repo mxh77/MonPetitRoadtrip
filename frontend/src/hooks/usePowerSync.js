@@ -1,5 +1,5 @@
 import { useQuery } from '@powersync/react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import API_URL from '../api/config';
 
@@ -26,7 +26,7 @@ export function useRoadtrips() {
   );
 
   // Roadtrips partagés — fetch REST (non PowerSync car hors scope de sync)
-  useEffect(() => {
+  const fetchShared = useCallback(() => {
     if (!token) return;
     fetch(`${API_URL}/api/roadtrips`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : [])
@@ -37,6 +37,8 @@ export function useRoadtrips() {
       .catch(() => {});
   }, [token]);
 
+  useEffect(() => { fetchShared(); }, [fetchShared]);
+
   const owned = ownedData ?? [];
   const ownedIds = new Set(owned.map(r => r.id));
   const uniqueShared = sharedRoadtrips.filter(r => !ownedIds.has(r.id));
@@ -44,14 +46,17 @@ export function useRoadtrips() {
     new Date(b.createdAt) - new Date(a.createdAt)
   );
 
-  return { roadtrips, isLoading };
+  return { roadtrips, isLoading, refreshShared: fetchShared };
 }
 
 /**
  * Retourne un roadtrip avec ses steps, activités et hébergements.
  */
 export function useRoadtrip(id) {
-  const { data: roadtripRows } = useQuery(
+  const token = useAuthStore((s) => s.token);
+  const [apiRoadtrip, setApiRoadtrip] = useState(null);
+
+  const { data: roadtripRows, isLoading: rtLoading } = useQuery(
     id ? 'SELECT * FROM roadtrips WHERE id = ?' : 'SELECT * FROM roadtrips WHERE 1=0',
     id ? [id] : []
   );
@@ -84,9 +89,18 @@ export function useRoadtrip(id) {
     activities: (activities ?? []).filter((a) => a.stepId === step.id),
   }));
 
-  return {
-    roadtrip: roadtrip ? { ...roadtrip, steps: stepsWithRelations } : null,
-  };
+  // Fallback REST pour les roadtrips partagés (non syncés dans PowerSync)
+  useEffect(() => {
+    if (rtLoading || roadtrip || !id || !token) return;
+    fetch(`${API_URL}/api/roadtrips/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setApiRoadtrip(data))
+      .catch(() => {});
+  }, [id, token, roadtrip, rtLoading]);
+
+  const result = roadtrip ? { ...roadtrip, steps: stepsWithRelations } : apiRoadtrip;
+
+  return { roadtrip: result };
 }
 
 /**

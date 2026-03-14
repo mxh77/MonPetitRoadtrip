@@ -94,22 +94,22 @@ export async function localDeleteStep(id) {
 // ─── Activities ───────────────────────────────────────────────────────────────
 
 export async function localCreateActivity({
-  stepId, type, name, location, startTime, endTime,
+  stepId, roadtripId, type, name, location, startTime, endTime,
   bookingRef, bookingUrl, cost, currency, notes, status, order,
 }, userId) {
   const id = generateId();
   const createdAt = now();
   await db.execute(
-    `INSERT INTO activities (id, stepId, userId, type, name, location, startTime, endTime,
+    `INSERT INTO activities (id, stepId, roadtripId, userId, type, name, location, startTime, endTime,
       bookingRef, bookingUrl, cost, currency, notes, status, "order", createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, stepId, userId, type ?? 'OTHER', name, location ?? null,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, stepId, roadtripId ?? null, userId, type ?? 'OTHER', name, location ?? null,
      startTime ?? null, endTime ?? null, bookingRef ?? null, bookingUrl ?? null,
      cost ?? null, currency ?? 'EUR', notes ?? null, status ?? 'PLANNED',
      order ?? 0, createdAt, createdAt]
   );
   return {
-    id, stepId, userId, type: type ?? 'OTHER', name, location,
+    id, stepId, roadtripId: roadtripId ?? null, userId, type: type ?? 'OTHER', name, location,
     startTime, endTime, bookingRef, bookingUrl, cost, currency: currency ?? 'EUR',
     notes, status: status ?? 'PLANNED', order: order ?? 0, createdAt, updatedAt: createdAt,
   };
@@ -136,22 +136,22 @@ export async function localDeletePhoto(id) {
 // ─── Accommodations ───────────────────────────────────────────────────────────
 
 export async function localCreateAccommodation({
-  stepId, type, name, address, checkIn, checkOut,
+  stepId, roadtripId, type, name, address, checkIn, checkOut,
   bookingRef, bookingUrl, pricePerNight, currency, notes, status,
 }, userId) {
   const id = generateId();
   const createdAt = now();
   await db.execute(
-    `INSERT INTO accommodations (id, stepId, userId, type, name, address, checkIn, checkOut,
+    `INSERT INTO accommodations (id, stepId, roadtripId, userId, type, name, address, checkIn, checkOut,
       bookingRef, bookingUrl, pricePerNight, currency, notes, status, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, stepId, userId, type ?? 'HOTEL', name, address ?? null,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, stepId, roadtripId ?? null, userId, type ?? 'HOTEL', name, address ?? null,
      checkIn ?? null, checkOut ?? null, bookingRef ?? null, bookingUrl ?? null,
      pricePerNight ?? null, currency ?? 'EUR', notes ?? null, status ?? 'PLANNED',
      createdAt, createdAt]
   );
   return {
-    id, stepId, userId, type: type ?? 'HOTEL', name, address,
+    id, stepId, roadtripId: roadtripId ?? null, userId, type: type ?? 'HOTEL', name, address,
     checkIn, checkOut, bookingRef, bookingUrl, pricePerNight,
     currency: currency ?? 'EUR', notes, status: status ?? 'PLANNED',
     createdAt, updatedAt: createdAt,

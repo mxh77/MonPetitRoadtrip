@@ -115,6 +115,7 @@ model Accommodation {
   updatedAt     DateTime      @updatedAt
   stepId        String        @unique
   userId        String
+  roadtripId    String?
   step          Step          @relation(fields: [stepId], references: [id], onDelete: Cascade)
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -147,6 +148,7 @@ model Activity {
   updatedAt  DateTime      @updatedAt
   stepId     String
   userId     String
+  roadtripId String?
   step       Step          @relation(fields: [stepId], references: [id], onDelete: Cascade)
   user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 

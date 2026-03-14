@@ -23,10 +23,13 @@ router.post('/', async (req, res) => {
     return res.status(409).json({ error: 'An accommodation already exists for this step' });
   }
 
+  const step = await prisma.step.findUnique({ where: { id: stepId }, select: { roadtripId: true } });
+
   const accommodation = await prisma.accommodation.create({
     data: {
       stepId,
       userId: req.user.userId,
+      roadtripId: step.roadtripId,
       type: type || 'HOTEL',
       name,
       address: address || null,
@@ -54,12 +57,15 @@ router.put('/:id', async (req, res) => {
   if (!role) return res.status(404).json({ error: 'Step not found' });
   if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
+  const step = await prisma.step.findUnique({ where: { id: stepId }, select: { roadtripId: true } });
+
   const accommodation = await prisma.accommodation.upsert({
     where: { id: req.params.id },
     create: {
       id: req.params.id,
       stepId,
       userId: req.user.userId,
+      roadtripId: step.roadtripId,
       type: type || 'HOTEL',
       name: name || 'Hébergement',
       address: address || null,

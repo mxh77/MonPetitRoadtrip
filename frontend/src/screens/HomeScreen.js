@@ -5,6 +5,7 @@ import {
   Modal, TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { COLORS, FONTS, RADIUS, SPACING, ROADTRIP_STATUS } from '../theme';
 import { useAuthStore } from '../store/authStore';
@@ -276,9 +277,16 @@ function TabBar({ active }) {
 
 export default function HomeScreen({ navigation }) {
   const { user, logout, token } = useAuthStore();
-  const { roadtrips, isLoading } = useRoadtrips();
+  const { roadtrips, isLoading, refreshShared } = useRoadtrips();
   const [menuVisible, setMenuVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Rafraîchir les roadtrips partagés à chaque focus de l'écran
+  useFocusEffect(
+    useCallback(() => {
+      refreshShared();
+    }, [refreshShared])
+  );
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -303,6 +311,7 @@ export default function HomeScreen({ navigation }) {
     id: item.id,
     title: item.title,
     userRole: item.userRole ?? 'OWNER',
+    roadtripData: item,
   });
 
   const firstName = user?.name?.split(/[\s&]+/)[0]?.trim() ?? '';

@@ -38,10 +38,13 @@ router.post('/', async (req, res) => {
   if (!role) return res.status(404).json({ error: 'Step not found' });
   if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
+  const step = await prisma.step.findUnique({ where: { id: stepId }, select: { roadtripId: true } });
+
   const activity = await prisma.activity.create({
     data: {
       stepId,
       userId: req.user.userId,
+      roadtripId: step.roadtripId,
       type: type || 'OTHER',
       name,
       location: location || null,
@@ -70,12 +73,15 @@ router.put('/:id', async (req, res) => {
   if (!role) return res.status(404).json({ error: 'Step not found' });
   if (role === 'VIEWER') return res.status(403).json({ error: 'Role EDITOR required' });
 
+  const step = await prisma.step.findUnique({ where: { id: stepId }, select: { roadtripId: true } });
+
   const activity = await prisma.activity.upsert({
     where: { id: req.params.id },
     create: {
       id: req.params.id,
       stepId,
       userId: req.user.userId,
+      roadtripId: step.roadtripId,
       type: type || 'OTHER',
       name: name || 'Activité',
       location: location || null,

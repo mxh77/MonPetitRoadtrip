@@ -45,6 +45,7 @@ const accommodations = new Table({
   createdAt: column.text,
   updatedAt: column.text,
   stepId: column.text,
+  roadtripId: column.text,
   userId: column.text,
 });
 
@@ -64,6 +65,7 @@ const activities = new Table({
   createdAt: column.text,
   updatedAt: column.text,
   stepId: column.text,
+  roadtripId: column.text,
   userId: column.text,
 });
 
