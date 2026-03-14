@@ -157,6 +157,11 @@ function RoadtripRow({ item, onPress }) {
         <View style={styles.rowFooter}>
           <StatusBadge status={item.status} />
           {steps > 0 && <Text style={styles.rowSteps}>{steps} étape{steps !== 1 ? 's' : ''}</Text>}
+          {item.userRole && item.userRole !== 'OWNER' && (
+            <View style={styles.sharedBadge}>
+              <Text style={styles.sharedBadgeText}>👥 Partagé</Text>
+            </View>
+          )}
         </View>
       </View>
       <Text style={styles.rowArrow}>›</Text>
@@ -289,10 +294,16 @@ export default function HomeScreen({ navigation }) {
 
   const featured = nextUpcoming(roadtrips);
   const otherRoadtrips = roadtrips.filter(r => r.id !== featured?.id);
+  const ownedOtherRoadtrips = otherRoadtrips.filter(r => !r.userRole || r.userRole === 'OWNER');
+  const sharedOtherRoadtrips = otherRoadtrips.filter(r => r.userRole && r.userRole !== 'OWNER');
   const { bottom: bottomInset } = useSafeAreaInsets();
   const tabBarHeight = 54 + Math.max(bottomInset, 8);
 
-  const goToRoadtrip = (item) => navigation.navigate('RoadtripDetail', { id: item.id, title: item.title });
+  const goToRoadtrip = (item) => navigation.navigate('RoadtripDetail', {
+    id: item.id,
+    title: item.title,
+    userRole: item.userRole ?? 'OWNER',
+  });
 
   const firstName = user?.name?.split(/[\s&]+/)[0]?.trim() ?? '';
   const restName = user?.name ? user.name.slice(firstName.length) : '';
@@ -352,10 +363,24 @@ export default function HomeScreen({ navigation }) {
             )}
 
             {/* ─── Autres roadtrips ─────────────────────────────────────── */}
-            {otherRoadtrips.length > 0 && (
+            {ownedOtherRoadtrips.length > 0 && (
               <>
                 <Text style={styles.sectionLabel}>MES ROADTRIPS</Text>
-                {otherRoadtrips.map(item => (
+                {ownedOtherRoadtrips.map(item => (
+                  <RoadtripRow
+                    key={item.id}
+                    item={item}
+                    onPress={() => goToRoadtrip(item)}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* ─── Roadtrips partagés ───────────────────────────────────── */}
+            {sharedOtherRoadtrips.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>PARTAGÉS AVEC MOI</Text>
+                {sharedOtherRoadtrips.map(item => (
                   <RoadtripRow
                     key={item.id}
                     item={item}
@@ -498,6 +523,13 @@ const styles = StyleSheet.create({
   rowFooter: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   rowSteps: { fontSize: 11, color: COLORS.textMuted },
   rowArrow: { fontSize: 22, color: COLORS.textDim, flexShrink: 0 },
+  sharedBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(78,168,222,0.12)',
+    borderRadius: RADIUS.full,
+    paddingHorizontal: SPACING.sm, paddingVertical: 2,
+  },
+  sharedBadgeText: { fontSize: 10, color: '#4EA8DE', fontWeight: '700' },
 
   // Tab bar
   tabBar: {

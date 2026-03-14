@@ -8,6 +8,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { COLORS, FONTS, RADIUS, SPACING } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
 import { useRoadtrip } from '../hooks/usePowerSync';
+import { useRoadtripRole } from '../hooks/useRoadtripRole';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W = 80;
@@ -112,14 +113,21 @@ function AddButton({ onPress }) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function RoadtripDetailScreen({ route, navigation }) {
-  const { id, roadtripData } = route.params;
+  const { id, roadtripData, userRole: routeUserRole } = route.params;
   const { deleteStep, deleteRoadtrip } = useRoadtripStore();
   const { roadtrip: syncedRoadtrip } = useRoadtrip(id);
+  const { role, isOwner: roleIsOwner, canEdit: roleCanEdit, isLoading: roleLoading } = useRoadtripRole(id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedStepIdx, setSelectedStepIdx] = useState(0);
   const timelineRef = useRef(null);
   const mapRef = useRef(null);
   const { bottom, top } = useSafeAreaInsets();
+
+  // Utiliser routeUserRole comme valeur initiale (optimistic), puis role quand chargé.
+  // En cas d'incertitude, on utilise VIEWER pour éviter d'afficher des actions non autorisées.
+  const effectiveRole = role ?? routeUserRole ?? 'VIEWER';
+  const effectiveCanEdit = effectiveRole === 'OWNER' || effectiveRole === 'EDITOR';
+  const effectiveIsOwner = effectiveRole === 'OWNER';
 
   const rt = syncedRoadtrip ?? (roadtripData ? { ...roadtripData, steps: [] } : null);
 
@@ -216,7 +224,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             <Text style={styles.headerBtnText}>‹</Text>
           </TouchableOpacity>
 
-          {/* Spacer pour pousser le bouton menu à droite */}
+          {/* Spacer pour pousser les boutons à droite */}
           <View style={{ flex: 1 }} />
 
           {/* Titre centré absolument */}
@@ -231,6 +239,14 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             ) : null}
           </View>
 
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Collaborators', { roadtripId: id })}
+            style={styles.headerBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text style={styles.headerBtnText}>👥</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={styles.headerBtnText}>⋯</Text>
           </TouchableOpacity>
@@ -241,8 +257,12 @@ export default function RoadtripDetailScreen({ route, navigation }) {
       {selectedStep && (
         <TouchableOpacity
           style={[styles.infoPanel, { bottom: 170 + Math.max(bottom, 12) }]}
-          onPress={() => navigation.navigate('EditStep', { step: selectedStep })}
-          activeOpacity={0.85}
+          onPress={() => {
+            if (effectiveCanEdit) {
+              navigation.navigate('EditStep', { step: selectedStep });
+            }
+          }}
+          activeOpacity={effectiveCanEdit ? 0.85 : 1}
         >
           <View style={styles.infoPanelInner}>
             <View style={{ flex: 1 }}>
@@ -289,32 +309,36 @@ export default function RoadtripDetailScreen({ route, navigation }) {
                 dayNum={dayOffset(rt.startDate, step.startDate)}
                 onPress={() => setSelectedStepIdx(idx)}
               />
-              <AddButton
-                onPress={() => navigation.navigate('CreateStep', {
-                  roadtripId: rt.id,
-                  stepCount: steps.length,
-                  insertAfterIdx: idx,
-                  startDate: rt.startDate,
-                })}
-              />
+              {effectiveCanEdit && (
+                <AddButton
+                  onPress={() => navigation.navigate('CreateStep', {
+                    roadtripId: rt.id,
+                    stepCount: steps.length,
+                    insertAfterIdx: idx,
+                    startDate: rt.startDate,
+                  })}
+                />
+              )}
             </View>
           ))}
 
           {/* Bouton "+" final pour ajouter une étape à la fin */}
-          <TouchableOpacity
-            style={styles.cardAddNew}
-            onPress={() => navigation.navigate('CreateStep', {
-              roadtripId: rt.id,
-              stepCount: steps.length,
-              startDate: rt.startDate,
-            })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.cardAddNewCircle}>
-              <Text style={styles.cardAddNewPlus}>+</Text>
-            </View>
-            <Text style={styles.cardAddNewLabel}>Ajouter</Text>
-          </TouchableOpacity>
+          {effectiveCanEdit && (
+            <TouchableOpacity
+              style={styles.cardAddNew}
+              onPress={() => navigation.navigate('CreateStep', {
+                roadtripId: rt.id,
+                stepCount: steps.length,
+                startDate: rt.startDate,
+              })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.cardAddNewCircle}>
+                <Text style={styles.cardAddNewPlus}>+</Text>
+              </View>
+              <Text style={styles.cardAddNewLabel}>Ajouter</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </View>
 
@@ -325,15 +349,24 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             <View style={styles.menuHandle} />
             <Text style={styles.menuTitle}>Options</Text>
             <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('EditRoadtrip', { roadtrip: rt }); }}>
-              <Text style={styles.menuItemIcon}>✏️</Text>
-              <Text style={styles.menuItemLabel}>Modifier le roadtrip</Text>
-            </TouchableOpacity>
-            <View style={styles.menuDivider} />
-            <TouchableOpacity style={styles.menuItem} onPress={handleDeleteRoadtrip}>
-              <Text style={styles.menuItemIconDanger}>🗑</Text>
-              <Text style={styles.menuItemLabelDanger}>Supprimer ce roadtrip</Text>
-            </TouchableOpacity>
+            {effectiveIsOwner ? (
+              <>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('EditRoadtrip', { roadtrip: rt }); }}>
+                  <Text style={styles.menuItemIcon}>✏️</Text>
+                  <Text style={styles.menuItemLabel}>Modifier le roadtrip</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+                <TouchableOpacity style={styles.menuItem} onPress={handleDeleteRoadtrip}>
+                  <Text style={styles.menuItemIconDanger}>🗑</Text>
+                  <Text style={styles.menuItemLabelDanger}>Supprimer ce roadtrip</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.menuItem}>
+                <Text style={styles.menuItemIcon}>🔒</Text>
+                <Text style={[styles.menuItemLabel, { color: COLORS.textMuted }]}>Seul l'organisateur peut modifier</Text>
+              </View>
+            )}
           </Pressable>
         </Pressable>
       </Modal>

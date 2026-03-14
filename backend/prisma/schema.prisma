@@ -24,6 +24,7 @@ model User {
   activities     Activity[]
   photos         Photo[]
   refreshTokens  RefreshToken[]
+  memberships    RoadtripMember[]
 
   @@map("users")
 }
@@ -52,6 +53,7 @@ model Roadtrip {
   userId        String
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   steps         Step[]
+  members       RoadtripMember[]
 
   @@map("roadtrips")
 }
@@ -182,4 +184,32 @@ model Photo {
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("photos")
+}
+
+model RoadtripMember {
+  id         String             @id @default(cuid())
+  role       RoadtripMemberRole @default(VIEWER)
+  status     InviteStatus       @default(PENDING)
+  invitedAt  DateTime           @default(now())
+  joinedAt   DateTime?
+  roadtripId String
+  userId     String?
+  email      String
+  roadtrip   Roadtrip           @relation(fields: [roadtripId], references: [id], onDelete: Cascade)
+  user       User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([roadtripId, email])
+  @@map("roadtrip_members")
+}
+
+enum RoadtripMemberRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
 }
