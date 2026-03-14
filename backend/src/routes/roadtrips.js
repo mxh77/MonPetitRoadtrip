@@ -101,9 +101,17 @@ router.get('/:id', async (req, res) => {
   res.json({ ...roadtrip, userRole: member.role });
 });
 
-// PUT /api/roadtrips/:id — upsert (OWNER uniquement, ID généré côté client pour l'offline-first)
-router.put('/:id', checkMemberRole('OWNER'), async (req, res) => {
+// PUT /api/roadtrips/:id — upsert (offline-first, ID généré côté client)
+// Création : l'utilisateur devient owner. Mise à jour : owner uniquement.
+router.put('/:id', async (req, res) => {
+  const userId = req.user.userId;
   const { title, startDate, endDate, coverPhotoUrl, status } = req.body;
+
+  // Si le roadtrip existe déjà, vérifier que l'appelant est bien l'owner
+  const existing = await prisma.roadtrip.findUnique({ where: { id: req.params.id } });
+  if (existing && existing.userId !== userId) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
 
   const roadtrip = await prisma.roadtrip.upsert({
     where: { id: req.params.id },
@@ -114,7 +122,7 @@ router.put('/:id', checkMemberRole('OWNER'), async (req, res) => {
       endDate: endDate ? new Date(endDate) : null,
       coverPhotoUrl: coverPhotoUrl || null,
       status: status || 'DRAFT',
-      userId: req.user.userId,
+      userId,
     },
     update: {
       ...(title !== undefined && { title }),

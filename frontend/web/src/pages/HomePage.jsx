@@ -111,6 +111,14 @@ export default function HomePage() {
                 {name ? <><span className="font-medium text-gray-700">{name}</span> · </> : null}{email}
               </span>
             )}
+            <a
+              href="/download"
+              className="text-sm font-semibold px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition inline-flex items-center gap-1"
+              title="Télécharger l'app Android"
+            >
+              <span>📱</span>
+              <span className="hidden sm:inline">APK</span>
+            </a>
             <Link
               to="/roadtrips/new"
               className="bg-brand text-white text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition"

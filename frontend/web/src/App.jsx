@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import HomePage from './pages/HomePage.jsx';
 import RoadtripPage from './pages/RoadtripPage.jsx';
 import RoadtripFormPage from './pages/RoadtripFormPage.jsx';
+import DownloadPage from './pages/DownloadPage.jsx';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token');
@@ -15,6 +16,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/download" element={<DownloadPage />} />
         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/roadtrips/new" element={<ProtectedRoute><RoadtripFormPage /></ProtectedRoute>} />
         <Route path="/roadtrips/:id/edit" element={<ProtectedRoute><RoadtripFormPage /></ProtectedRoute>} />

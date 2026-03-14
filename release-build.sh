@@ -48,15 +48,32 @@ STORE_PASSWORD=$(grep "storePassword" "$KEYSTORE_PROPS" | cut -d'=' -f2)
 KEY_ALIAS=$(grep "keyAlias" "$KEYSTORE_PROPS" | cut -d'=' -f2)
 KEY_PASSWORD=$(grep "keyPassword" "$KEYSTORE_PROPS" | cut -d'=' -f2)
 
-# ─── Prebuild propre (production = pas d'APP_VARIANT) ───────────────────────
+# ─── Prebuild (skippé si le projet natif release est déjà présent) ──────────
 echo -e "${YELLOW}[1/4]${RESET} Prebuild Expo (production)..."
 unset APP_VARIANT
 cd "$FRONTEND_DIR"
 
-[ -d "android" ] && (cd android && ./gradlew --stop 2>/dev/null || true) && rm -rf android
+# Charger .env.production (ou .env) dans le shell pour que Metro
+# substitue correctement les variables EXPO_PUBLIC_* pendant assembleRelease
+ENV_FILE="$FRONTEND_DIR/.env.production"
+[ -f "$ENV_FILE" ] || ENV_FILE="$FRONTEND_DIR/.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
 
-npx expo prebuild --platform android --no-install
-echo -e "${GREEN}✓ Prebuild terminé${RESET}"
+# Skipper le prebuild si le projet natif est déjà en mode release (com.mxh7777.monpetitroadtrip)
+MANIFEST="$FRONTEND_DIR/android/app/src/main/AndroidManifest.xml"
+if grep -q 'package="com.mxh7777.monpetitroadtrip"' "$MANIFEST" 2>/dev/null && \
+   ! grep -q 'com.mxh7777.monpetitroadtrip.dev' "$MANIFEST" 2>/dev/null; then
+  echo -e "${GREEN}✓ Projet natif release déjà présent — prebuild skippé${RESET}"
+else
+  [ -d "android" ] && (cd android && ./gradlew --stop 2>/dev/null || true) && rm -rf android
+  npx expo prebuild --platform android --no-install
+  echo -e "${GREEN}✓ Prebuild terminé${RESET}"
+fi
 
 # ─── Copie keystore + config Gradle ──────────────────────────────────────────
 echo -e "\n${YELLOW}[2/4]${RESET} Configuration signing..."
@@ -86,12 +103,12 @@ sed -i "s/    buildTypes {/$SIGNING_BLOCK    buildTypes {/" "$BUILD_GRADLE"
 sed -i "/minifyEnabled/a\\            signingConfig signingConfigs.release" "$BUILD_GRADLE"
 
 echo -e "${GREEN}✓ Signing configuré${RESET}"
-echo -e "${GREEN}✓ Signing configuré${RESET}"
 
 # ─── Build release ───────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[3/4]${RESET} Build APK release...\n"
 cd "$FRONTEND_DIR/android"
-./gradlew assembleRelease
+# --build-cache : réutilise les artefacts Gradle entre builds
+./gradlew assembleRelease --build-cache
 
 # ─── Install ─────────────────────────────────────────────────────────────────
 APK_RAW="$FRONTEND_DIR/android/app/build/outputs/apk/release/app-release.apk"
@@ -100,12 +117,20 @@ APK_PATH="$ROOT_DIR/monpetitroadtrip.apk"
 if [ -f "$APK_RAW" ]; then
   cp "$APK_RAW" "$APK_PATH"
   echo -e "\n${GREEN}✓ APK : monpetitroadtrip.apk${RESET}"
-  echo -e "\n${YELLOW}[4/4]${RESET} Installation sur le téléphone..."
+  echo -e "\n${YELLOW}[4/5]${RESET} Installation sur le téléphone..."
   DEVICES=$(adb devices 2>/dev/null | grep -v "List of devices" | grep "device$" | wc -l)
   if [ "$DEVICES" -gt 0 ]; then
     adb install -r "$APK_PATH" && echo -e "${GREEN}✓ Installé !${RESET}"
   else
     echo -e "${YELLOW}⚠ Pas de téléphone connecté — installe manuellement l'APK.${RESET}"
+  fi
+
+  echo -e "\n${YELLOW}[5/5]${RESET} Upload APK vers CT111..."
+  if ssh -o ConnectTimeout=5 ct111 "echo ok" &>/dev/null; then
+    scp "$APK_PATH" ct111:/opt/MonPetitRoadtrip/downloads/monpetitroadtrip.apk
+    echo -e "${GREEN}✓ APK disponible sur https://monpetitroadtrip.harmonixe.fr/downloads/monpetitroadtrip.apk${RESET}"
+  else
+    echo -e "${YELLOW}⚠ CT111 inaccessible — upload ignoré.${RESET}"
   fi
 else
   echo -e "${RED}✗ APK introuvable.${RESET}"

@@ -57,6 +57,10 @@ if [ "$1" != "--skip-build" ]; then
   fi
   if [ "$NEED_PREBUILD" = true ]; then
     echo -e "\n${YELLOW}⚙ Génération du projet natif (APP_VARIANT=development)...${RESET}"
+    # Tuer tous les daemons Gradle/Java qui verrouillent les fichiers (nécessaire sous Windows)
+    [ -f "$FRONTEND_DIR/android/gradlew" ] && (cd "$FRONTEND_DIR/android" && ./gradlew --stop 2>/dev/null || true)
+    taskkill //F //IM java.exe 2>/dev/null || true
+    sleep 2
     rm -rf "$FRONTEND_DIR/android"
     cd "$FRONTEND_DIR"
     APP_VARIANT=development npx expo prebuild --platform android --no-install
@@ -79,7 +83,7 @@ if [ "$1" != "--skip-build" ]; then
 
   echo -e "\n${YELLOW}[1/2]${RESET} Gradle installDebug...\n"
   cd "$FRONTEND_DIR/android"
-  ./gradlew installDebug
+  ./gradlew installDebug --build-cache
   cd "$FRONTEND_DIR"
 
   APK_RAW="android/app/build/outputs/apk/debug/app-debug.apk"

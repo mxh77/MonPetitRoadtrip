@@ -1,5 +1,31 @@
 import { AbstractPowerSyncDatabase, PowerSyncBackendConnector } from '@powersync/react-native';
 import API_URL from '../api/config';
+import { useAuthStore } from '../store/authStore';
+
+// Tag logcat distinct selon la variante (visible dans : adb logcat -s ReactNativeJS)
+const TAG = __DEV__ ? '[MPR_Debug][PowerSync]' : '[MPR][PowerSync]';
+
+/**
+ * Tente un refresh silencieux si le token d'accès est expiré.
+ * Retourne le token valide ou null si non récupérable.
+ */
+async function getValidToken(getToken) {
+  const token = await getToken();
+  if (!token) return null;
+
+  // Vérification légère : décoder le payload sans vérifier la signature
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiresSoon = payload.exp && payload.exp < Math.floor(Date.now() / 1000) + 60;
+    if (expiresSoon) {
+      const newToken = await useAuthStore.getState().silentRefresh();
+      return newToken;
+    }
+  } catch {
+    // Impossible de décoder → utiliser le token tel quel
+  }
+  return token;
+}
 
 /**
  * Connecteur PowerSync — fournit le token JWT à PowerSync
@@ -11,12 +37,27 @@ export class AppConnector {
   }
 
   async fetchCredentials() {
-    const token = await this.getToken();
+    let token = await getValidToken(this.getToken);
     if (!token) throw new Error('Not authenticated');
 
-    const res = await fetch(`${API_URL}/api/auth/powersync-token`, {
+    console.log(TAG, 'fetchCredentials → API_URL:', API_URL);
+
+    let res = await fetch(`${API_URL}/api/auth/powersync-token`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+
+    console.log(TAG, 'powersync-token status:', res.status);
+
+    // Token expiré → silent refresh et retry
+    if (res.status === 401) {
+      console.log(TAG, '401 → silent refresh');
+      token = await useAuthStore.getState().silentRefresh();
+      if (!token) throw new Error('Not authenticated');
+      res = await fetch(`${API_URL}/api/auth/powersync-token`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(TAG, 'retry status:', res.status);
+    }
 
     if (!res.ok) throw new Error('Failed to fetch PowerSync token');
 
@@ -33,7 +74,11 @@ export class AppConnector {
     const batch = await database.getCrudBatch(200);
     if (!batch) return;
 
-    const token = await this.getToken();
+    console.log(TAG, `uploadData — ${batch.crud.length} op(s) en queue:`,
+      batch.crud.map(e => `${e.op} ${e.table}/${e.id.slice(0, 8)} isPending=${e.opData?.isPending}`).join(' | ')
+    );
+
+    const token = await getValidToken(this.getToken);
     if (!token) {
       await batch.cancel();
       return;
@@ -61,6 +106,7 @@ export class AppConnector {
             });
             if (photoRes.ok) {
               const uploaded = await photoRes.json();
+              console.log(TAG, 'photo uploaded OK:', id, uploaded.url);
               await database.execute(
                 'UPDATE photos SET url = ?, isPending = 0 WHERE id = ?',
                 [uploaded.url, id]
@@ -72,13 +118,39 @@ export class AppConnector {
                   [uploaded.url, opData.stepId, opData.url]
                 );
               }
-            } else if (photoRes.status !== 404) {
+            } else if (photoRes.status >= 500) {
+              // Erreur serveur → on annule tout, PowerSync réessaiera plus tard
+              console.warn(TAG, 'photo upload 5xx → batch.cancel()', photoRes.status, id);
               await batch.cancel();
               return;
             }
-          } catch {
-            await batch.cancel();
-            return;
+            // 4xx (URI inaccessible, mauvais format…) : on marque comme non-pending
+            // pour débloquer la queue sans perdre la métadonnée locale
+            else {
+              console.warn(TAG, 'photo upload', photoRes.status, '→ isPending=0, skipping:', id);
+              await database.execute('UPDATE photos SET isPending = 0 WHERE id = ?', [id]);
+            }
+          } catch (e) {
+            const msg = e?.message || String(e);
+            console.error(TAG, 'photo upload catch:', id, msg);
+            if (msg === 'Network request failed') {
+              // "Network request failed" arrive aussi quand le fichier URI est illisible
+              // (cache ImagePicker nettoyé). On distingue les deux cas avec un ping réseau.
+              try {
+                await fetch(`${API_URL}/health`, { signal: AbortSignal.timeout(3000) });
+                // Ping OK → réseau fonctionnel → c'est le fichier qui manque
+                console.warn(TAG, 'photo file gone (network OK), skipping:', id);
+                await database.execute('UPDATE photos SET isPending = 0 WHERE id = ?', [id]);
+              } catch {
+                // Ping KO → vrai problème réseau → retry plus tard
+                console.warn(TAG, 'photo upload network error → batch.cancel()');
+                await batch.cancel();
+                return;
+              }
+            } else {
+              console.warn(TAG, 'photo file not accessible, skipping:', id);
+              await database.execute('UPDATE photos SET isPending = 0 WHERE id = ?', [id]);
+            }
           }
         } else if (op === 'DELETE') {
           try {
@@ -87,12 +159,19 @@ export class AppConnector {
               headers: { Authorization: `Bearer ${token}` },
             });
             if (!delRes.ok && delRes.status !== 404) {
+              console.warn(TAG, 'photo DELETE', delRes.status, '→ batch.cancel()', id);
               await batch.cancel();
               return;
             }
-          } catch {
-            await batch.cancel();
-            return;
+            console.log(TAG, 'photo DELETE OK:', id);
+          } catch (e) {
+            const msg = e?.message || String(e);
+            console.error(TAG, 'photo DELETE catch:', id, msg);
+            if (msg === 'Network request failed') {
+              await batch.cancel();
+              return;
+            }
+            // Autre erreur → skip ce DELETE (la photo est peut-être déjà absente)
           }
         }
         // PUT avec isPending=0 (post-upload) : serveur déjà à jour via le POST → skip
@@ -100,13 +179,28 @@ export class AppConnector {
       }
 
       try {
+        // Si un step a un photoUrl local dans le CRUD log (content:// ou file://),
+        // c'est que uploadData a déjà uploadé la photo et mis à jour le SQLite local.
+        // On relit la valeur actuelle pour envoyer l'URL Supabase au backend.
+        let effectiveOpData = opData;
+        if (table === 'steps' && opData.photoUrl) {
+          const isLocal = opData.photoUrl.startsWith('file://') || opData.photoUrl.startsWith('content://');
+          if (isLocal) {
+            const result = await database.execute('SELECT photoUrl FROM steps WHERE id = ?', [id]);
+            const currentUrl = result.rows?.item?.(0)?.photoUrl;
+            if (currentUrl && !currentUrl.startsWith('file://') && !currentUrl.startsWith('content://')) {
+              effectiveOpData = { ...opData, photoUrl: currentUrl };
+            }
+          }
+        }
+
         let method, body;
         if (op === 'PUT') {
           method = 'PUT';
-          body = JSON.stringify(opData);
+          body = JSON.stringify(effectiveOpData);
         } else if (op === 'PATCH') {
           method = 'PATCH';
-          body = JSON.stringify(opData);
+          body = JSON.stringify(effectiveOpData);
         } else if (op === 'DELETE') {
           method = 'DELETE';
         } else {
@@ -122,20 +216,25 @@ export class AppConnector {
           ...(body ? { body } : {}),
         });
 
-        // 404 = déjà supprimé côté serveur, on ignore
-        if (!res.ok && res.status !== 404) {
-          console.warn(`[uploadData] ${method} ${url} → ${res.status}`);
-          // Erreur serveur (5xx) ou auth (401/403) → on annule, PowerSync réessaiera
+        // Pour DELETE : 404 = déjà supprimé côté serveur, on ignore
+        // Pour PUT/PATCH : tout code d'erreur = vrai problème
+        const okForDelete = op === 'DELETE' && res.status === 404;
+        if (!res.ok && !okForDelete) {
+          console.warn(TAG, `${method} ${table}/${id} → ${res.status} → batch.cancel()`);
           await batch.cancel();
           return;
         }
+        console.log(TAG, `${method} ${table}/${id} → OK (${res.status})`);
       } catch (e) {
+        const msg = e?.message || String(e);
+        console.error(TAG, `${method} ${table}/${id} catch: ${msg} → batch.cancel()`);
         // Erreur réseau — on annule le batch, PowerSync réessaiera plus tard
         await batch.cancel();
         return;
       }
     }
 
+    console.log(TAG, 'batch.complete() — toutes les ops traitées');
     await batch.complete();
   }
 }
