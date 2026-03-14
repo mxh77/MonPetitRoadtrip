@@ -17,11 +17,22 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function decodeToken(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch {
+    return {};
+  }
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [roadtrips, setRoadtrips] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const token = localStorage.getItem('token');
+  const { name, email } = decodeToken(token ?? '');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -44,6 +55,24 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Polling toutes les 5s pour détecter les changements de rôle sur les roadtrips partagés
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get('/roadtrips');
+        setRoadtrips(prev => {
+          // Compare les rôles : si au moins un a changé, applique la mise à jour
+          const hasChange = res.data.some(r => {
+            const existing = prev.find(p => p.id === r.id);
+            return existing && existing.userRole !== r.userRole;
+          });
+          return hasChange ? res.data : prev;
+        });
+      } catch { /* silencieux */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   function logout() {
     localStorage.removeItem('token');
@@ -77,6 +106,11 @@ export default function HomePage() {
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-xl font-serif font-bold text-gray-900">Mon Petit Roadtrip</h1>
           <div className="flex items-center gap-3">
+            {email && (
+              <span className="text-sm text-gray-500 hidden sm:block">
+                {name ? <><span className="font-medium text-gray-700">{name}</span> · </> : null}{email}
+              </span>
+            )}
             <Link
               to="/roadtrips/new"
               className="bg-brand text-white text-sm font-semibold px-4 py-2 rounded-lg hover:opacity-90 transition"

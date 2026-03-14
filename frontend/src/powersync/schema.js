@@ -83,10 +83,21 @@ const photos = new Table({
   createdAt: column.text,
 });
 
+const roadtrip_members = new Table({
+  role: column.text,
+  status: column.text,
+  invitedAt: column.text,
+  joinedAt: column.text,
+  roadtripId: column.text,
+  userId: column.text,
+  email: column.text,
+});
+
 export const AppSchema = new Schema({
   roadtrips,
   steps,
   accommodations,
   activities,
   photos,
+  roadtrip_members,
 });

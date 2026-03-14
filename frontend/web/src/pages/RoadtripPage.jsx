@@ -20,6 +20,7 @@ export default function RoadtripPage() {
   const [steps, setSteps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCollaborators, setShowCollaborators] = useState(false);
+  const [membersRefreshKey, setMembersRefreshKey] = useState(0);
 
   // Modal état
   const [stepModal, setStepModal] = useState(null); // null | { mode: 'create'|'edit', step?: {} }
@@ -155,7 +156,7 @@ export default function RoadtripPage() {
         {/* Panneau collaborateurs */}
         {showCollaborators && (
           <div className="w-80 shrink-0">
-            <CollaboratorsPanel roadtripId={id} isOwner={isOwner} />
+            <CollaboratorsPanel key={membersRefreshKey} roadtripId={id} isOwner={isOwner} />
           </div>
         )}
       </div>
