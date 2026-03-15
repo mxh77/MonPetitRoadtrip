@@ -1,11 +1,10 @@
 import React, { useState, useLayoutEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Modal, Platform,
+  ScrollView, Alert, ActivityIndicator, Modal,
   Image, Dimensions, Pressable,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, STEP_TYPE } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
@@ -13,20 +12,25 @@ import { useAuthStore } from '../store/authStore';
 import { useStepPhotos } from '../hooks/usePowerSync';
 import { localDeletePhoto, localInsertPhoto, generateId } from '../powersync/localWrite';
 import LocationPicker from '../components/LocationPicker';
+import DateTimePickerModal from '../components/DateTimePickerModal';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
 const TYPES = Object.entries(STEP_TYPE);
 
-function formatDisplay(d) {
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
 function parseDate(str) {
   if (!str) return null;
-  const d = new Date(str);
-  return isNaN(d.getTime()) ? null : d;
+  const [y, m, d] = str.slice(0, 10).split('-').map(Number);
+  if (!y) return null;
+  return new Date(y, m - 1, d, 12, 0, 0); // midi local — jamais de décalage UTC
 }
+
+const toLocalDateString = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 export default function EditStepScreen({ route, navigation }) {
   const { step } = route.params;
@@ -39,12 +43,13 @@ export default function EditStepScreen({ route, navigation }) {
   const [latitude, setLatitude] = useState(step.latitude ?? null);
   const [longitude, setLongitude] = useState(step.longitude ?? null);
   const [notes, setNotes] = useState(step.notes ?? '');
+  const [arrivalTime, setArrivalTime] = useState(step.arrivalTime ?? null);
+  const [departureTime, setDepartureTime] = useState(step.departureTime ?? null);
   const [loading, setLoading] = useState(false);
 
-  // Picker state
-  const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerTarget, setPickerTarget] = useState(null);
-  const [pickerTemp, setPickerTemp] = useState(new Date());
+  // DateTime picker
+  const [dtPickerVisible, setDtPickerVisible] = useState(false);
+  const [dtPickerTarget, setDtPickerTarget] = useState(null); // 'start' | 'end'
 
   const { updateStep } = useRoadtripStore();
   const userId = useAuthStore((s) => s.user?.id);
@@ -118,20 +123,14 @@ export default function EditStepScreen({ route, navigation }) {
     ]);
   };
 
-  const openPicker = (target) => {
-    setPickerTarget(target);
-    setPickerTemp(target === 'start' ? startDate : (endDate ?? startDate));
-    setPickerVisible(true);
+  const openDtPicker = (target) => {
+    setDtPickerTarget(target);
+    setDtPickerVisible(true);
   };
 
-  const confirmPicker = () => {
-    if (pickerTarget === 'start') {
-      setStartDate(pickerTemp);
-      if (endDate && pickerTemp > endDate) setEndDate(pickerTemp);
-    } else {
-      setEndDate(pickerTemp);
-    }
-    setPickerVisible(false);
+  const fmtBtn = (d, t) => {
+    const s = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+    return t ? `${s}  ·  ${t}` : s;
   };
 
   const handleSubmit = async () => {
@@ -147,8 +146,10 @@ export default function EditStepScreen({ route, navigation }) {
         location: location.trim() || null,
         latitude: latitude ?? null,
         longitude: longitude ?? null,
-        startDate: startDate.toISOString(),
-        endDate: endDate ? endDate.toISOString() : null,
+        startDate: toLocalDateString(startDate),
+        endDate: endDate ? toLocalDateString(endDate) : null,
+        arrivalTime: arrivalTime ?? null,
+        departureTime: departureTime ?? null,
         notes: notes.trim() || null,
       });
       navigation.goBack();
@@ -227,26 +228,27 @@ export default function EditStepScreen({ route, navigation }) {
 
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always">
 
-        {/* ─── Dates ───────────────────────────────────────────────────────── */}
+        {/* ─── Arrivée / Départ ────────────────────────────────────────────── */}
         <View style={styles.row}>
           <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Date de début</Text>
-            <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('start')}>
-              <Text style={styles.dateBtnIcon}>📅</Text>
-              <Text style={styles.dateBtnText}>{formatDisplay(startDate)}</Text>
+            <Text style={styles.label}>Arrivée</Text>
+            <TouchableOpacity style={styles.dateBtn} onPress={() => openDtPicker('start')}>
+              <Text style={styles.dateBtnText}>{fmtBtn(startDate, arrivalTime)}</Text>
             </TouchableOpacity>
           </View>
           <View style={{ width: SPACING.md }} />
           <View style={[styles.inputGroup, { flex: 1 }]}>
-            <Text style={styles.label}>Date de fin</Text>
-            <TouchableOpacity style={styles.dateBtn} onPress={() => openPicker('end')}>
-              <Text style={styles.dateBtnIcon}>📅</Text>
+            <Text style={styles.label}>Départ</Text>
+            <TouchableOpacity
+              style={[styles.dateBtn, !endDate && styles.dateBtnEmpty]}
+              onPress={() => openDtPicker('end')}
+            >
               <Text style={[styles.dateBtnText, !endDate && { color: COLORS.textDim }]}>
-                {endDate ? formatDisplay(endDate) : 'Non définie'}
+                {endDate ? fmtBtn(endDate, departureTime) : '+ Ajouter'}
               </Text>
             </TouchableOpacity>
             {endDate && (
-              <TouchableOpacity onPress={() => setEndDate(null)} style={styles.clearBtn}>
+              <TouchableOpacity onPress={() => { setEndDate(null); setDepartureTime(null); }} style={styles.clearBtn}>
                 <Text style={styles.clearBtnText}>✕ effacer</Text>
               </TouchableOpacity>
             )}
@@ -299,36 +301,6 @@ export default function EditStepScreen({ route, navigation }) {
 
       </ScrollView>
 
-      {/* ─── Date Picker Modal (iOS) ─────────────────────────────────────── */}
-      {Platform.OS === 'ios' && (
-        <Modal visible={pickerVisible} transparent animationType="slide">
-          <View style={styles.pickerOverlay}>
-            <View style={styles.pickerSheet}>
-              <View style={styles.pickerHeader}>
-                <TouchableOpacity onPress={() => setPickerVisible(false)}>
-                  <Text style={styles.pickerCancel}>Annuler</Text>
-                </TouchableOpacity>
-                <Text style={styles.pickerTitle}>
-                  {pickerTarget === 'start' ? 'Date de début' : 'Date de fin'}
-                </Text>
-                <TouchableOpacity onPress={confirmPicker}>
-                  <Text style={styles.pickerConfirm}>OK</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={pickerTemp}
-                mode="date"
-                display="spinner"
-                locale="fr-FR"
-                minimumDate={pickerTarget === 'end' ? startDate : undefined}
-                onChange={(_, d) => d && setPickerTemp(d)}
-                style={{ backgroundColor: COLORS.surface }}
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
-
       {/* ─── Photo action menu ─────────────────────────────────────────── */}
       <Modal visible={photoMenuVisible} transparent animationType="slide" onRequestClose={() => setPhotoMenuVisible(false)}>
         <Pressable style={styles.photoMenuOverlay} onPress={() => setPhotoMenuVisible(false)}>
@@ -348,26 +320,25 @@ export default function EditStepScreen({ route, navigation }) {
         </Pressable>
       </Modal>
 
-      {/* Android : picker direct */}
-      {Platform.OS === 'android' && pickerVisible && (
-        <DateTimePicker
-          value={pickerTemp}
-          mode="date"
-          display="default"
-          minimumDate={pickerTarget === 'end' ? startDate : undefined}
-          onChange={(_, d) => {
-            setPickerVisible(false);
-            if (d) {
-              if (pickerTarget === 'start') {
-                setStartDate(d);
-                if (endDate && d > endDate) setEndDate(d);
-              } else {
-                setEndDate(d);
-              }
-            }
-          }}
-        />
-      )}
+      <DateTimePickerModal
+        visible={dtPickerVisible}
+        date={dtPickerTarget === 'start' ? startDate : (endDate ?? startDate)}
+        time={dtPickerTarget === 'start' ? arrivalTime : departureTime}
+        label={dtPickerTarget === 'start' ? "Arrivée" : 'Départ'}
+        minDate={dtPickerTarget === 'end' ? startDate : null}
+        onConfirm={({ date, time }) => {
+          if (dtPickerTarget === 'start') {
+            setStartDate(date);
+            setArrivalTime(time);
+            if (endDate && date > endDate) setEndDate(date);
+          } else {
+            setEndDate(date);
+            setDepartureTime(time);
+          }
+          setDtPickerVisible(false);
+        }}
+        onCancel={() => setDtPickerVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -399,26 +370,20 @@ const styles = StyleSheet.create({
   },
   inputMulti: { height: 80, textAlignVertical: 'top' },
   dateBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.xs,
+    justifyContent: 'center',
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm + 2,
+    paddingVertical: SPACING.md,
+    minHeight: 48,
   },
-  dateBtnIcon: { fontSize: 15 },
-  dateBtnText: { color: COLORS.text, fontSize: 14, flex: 1 },
+  dateBtnEmpty: { borderStyle: 'dashed' },
+  dateBtnText: { color: COLORS.text, fontSize: 14, textAlign: 'center' },
   clearBtn: { marginTop: 4, alignSelf: 'flex-start' },
   clearBtnText: { color: COLORS.textDim, fontSize: 12 },
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  pickerSheet: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, overflow: 'hidden' },
-  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  pickerTitle: { fontFamily: FONTS.titleRegular, fontSize: 16, color: COLORS.text },
-  pickerCancel: { color: COLORS.textDim, fontSize: 15 },
-  pickerConfirm: { color: COLORS.accent, fontSize: 15, fontWeight: '700' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   photoItem: { width: (SCREEN_W - SPACING.lg * 2 - 16) / 3, aspectRatio: 1, borderRadius: RADIUS.sm },
   photoItemCover: { borderWidth: 2.5, borderColor: COLORS.accent },

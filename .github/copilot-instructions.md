@@ -129,3 +129,44 @@ cd backend && node src/index.js
 # Terminal 2 — Frontend (après build natif déjà fait)
 cd frontend && npx expo start -c
 ```
+
+## ⚠️ RÈGLE CRITIQUE — Gestion des dates (LOCAL TIME ONLY)
+
+**Les dates dans cette app représentent des jours calendaires, pas des instants UTC.**
+Un départ le 16 mars saisi en France doit s'afficher le 16 mars au Canada. Il n'y a pas de sémantique "instant universel".
+
+### Principe : toujours travailler en heure locale, ne JAMAIS utiliser UTC
+
+**Interdit :**
+- `date.toISOString()` → produit une string UTC, décale la date si heure locale ≠ UTC
+- `new Date(isoString)` quand la string contient `T00:00:00Z` → interprète en UTC, décale en local
+- Toute conversion implicite JavaScript Date → UTC
+
+**Obligatoire :**
+- **Sérialisation avant envoi au backend** : extraire les composantes locales
+  ```js
+  const toLocalDateString = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`; // ex: "2026-03-16" — pas de timezone
+  };
+  ```
+- **Désérialisation à la réception du backend / PowerSync** : construire en local
+  ```js
+  const fromLocalDateString = (str) => {
+    if (!str) return new Date();
+    const [y, m, d] = str.slice(0, 10).split('-').map(Number);
+    return new Date(y, m - 1, d, 12, 0, 0); // midi local = jamais de décalage jour
+  };
+  ```
+- **Stockage en base** : colonne `DATE` PostgreSQL (pas `TIMESTAMP`) ou string `YYYY-MM-DD` si on veut vraiment un string.
+- **Affichage** : `date.toLocaleDateString('fr-FR', ...)` — jamais de `.toUTCString()`
+
+### Application à tout le codebase
+- `DateRangePicker` : `fromYMD` doit créer `new Date(y, m-1, d, 12, 0, 0)`
+- `EditRoadtripScreen.parseDate` : reconstruire en local depuis la string reçue
+- `CreateRoadtripScreen` et tout autre écran de saisie : envoyer `toLocalDateString(date)` au lieu de `date.toISOString()`
+- Backend : pas de transformation de timezone, stocker et renvoyer tel quel
+- PowerSync / SQLite : stocker comme string `YYYY-MM-DD`
+
