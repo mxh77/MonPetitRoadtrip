@@ -11,8 +11,12 @@ import { useRoadtrip } from '../hooks/usePowerSync';
 import { useRoadtripRole } from '../hooks/useRoadtripRole';
 
 const { width: SCREEN_W } = Dimensions.get('window');
-const CARD_W = 80;
-const CARD_GAP = 8;
+const CARD_W    = Math.floor(SCREEN_W * 0.75);
+const CARD_H    = 120;
+const CARD_GAP  = 20;
+const SNAP_W    = CARD_W + CARD_GAP;
+const SIDE_PAD  = Math.floor((SCREEN_W - CARD_W) / 2);
+const TIMELINE_H = CARD_H + 36;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -50,10 +54,8 @@ function computeRegion(pts) {
 }
 
 const STEP_COLORS = {
-  DEPARTURE: '#2D6A4F',
-  RETURN:    '#1D3557',
-  STAGE:     '#1B4332',
-  STOP:      '#4A1942',
+  STAGE: '#1B4332',
+  STOP:  '#4A1942',
 };
 
 // ─── MapErrorBoundary ────────────────────────────────────────────────────────
@@ -74,24 +76,68 @@ class MapErrorBoundary extends Component {
 
 // ─── StepCard ─────────────────────────────────────────────────────────────────
 
-function StepCard({ step, active, dayNum, onPress }) {
+function StepCard({ step, active, dayNum, onPress, onEdit, canEdit }) {
   const initials = getInitials(step.name);
   const bg = STEP_COLORS[step.type] ?? '#1B4332';
+  const hasPhoto = !!step.photoUrl;
+  const nbHeberg = step.accommodation ? 1 : 0;
+  const nbActiv  = Array.isArray(step.activities) ? step.activities.length : 0;
+
+  const handlePress = () => {
+    if (canEdit) {
+      onEdit();
+    } else {
+      onPress();
+    }
+  };
+
   return (
-    <TouchableOpacity onPress={onPress} style={styles.card} activeOpacity={0.8}>
-      <View style={[styles.cardCircle, { backgroundColor: bg }, active && styles.cardCircleActive]}>
-        {step.photoUrl ? (
-          <Image source={{ uri: step.photoUrl }} style={styles.cardPhoto} resizeMode="cover" />
-        ) : (
-          <Text style={styles.cardInitials}>{initials}</Text>
-        )}
-      </View>
-      {dayNum != null && (
-        <Text style={[styles.cardDay, active && styles.cardDayActive]}>J{dayNum}</Text>
+    <TouchableOpacity
+      onPress={handlePress}
+      style={[styles.card, active && styles.cardActive, { backgroundColor: bg }]}
+      activeOpacity={0.85}
+    >
+      {/* Photo plein format */}
+      {hasPhoto && (
+        <Image
+          source={{ uri: step.photoUrl }}
+          style={StyleSheet.absoluteFill}
+          resizeMode="cover"
+        />
       )}
-      <Text style={[styles.cardName, active && styles.cardNameActive]} numberOfLines={2}>
-        {step.name}
-      </Text>
+
+      {/* Overlay sombre uniforme — pas de bord visible */}
+      <View style={styles.cardOverlay1} />
+
+      {/* Badge jour — top left */}
+      {dayNum != null && (
+        <View style={styles.cardDayBadge}>
+          <Text style={styles.cardDayText}>J{dayNum}</Text>
+        </View>
+      )}
+
+      {/* Contenu overlay bas */}
+      <View style={styles.cardContent}>
+        <Text style={styles.cardName} numberOfLines={1}>{step.name}</Text>
+        {step.startDate ? (() => {
+          const start = formatDate(step.startDate);
+          const end = step.endDate && step.endDate !== step.startDate ? formatDate(step.endDate) : null;
+          return <Text style={styles.cardDate}>{end ? `${start} → ${end}` : start}</Text>;
+        })() : null}
+        {step.location ? (
+          <Text style={styles.cardLocation} numberOfLines={1}>📍 {step.location}</Text>
+        ) : null}
+        {(nbHeberg > 0 || nbActiv > 0) ? (
+          <View style={styles.cardCounts}>
+            {nbHeberg > 0 && (
+              <Text style={styles.cardCountText}>🏨 {nbHeberg}</Text>
+            )}
+            {nbActiv > 0 && (
+              <Text style={styles.cardCountText}>🎯 {nbActiv}</Text>
+            )}
+          </View>
+        ) : null}
+      </View>
     </TouchableOpacity>
   );
 }
@@ -151,9 +197,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
   // Scroll timeline vers la carte active
   useEffect(() => {
     if (!timelineRef.current) return;
-    const itemW = CARD_W + CARD_GAP + 40; // card + addBtn
-    const offset = selectedStepIdx * itemW - SCREEN_W / 2 + CARD_W / 2 + 16;
-    timelineRef.current.scrollTo({ x: Math.max(0, offset), animated: true });
+    timelineRef.current.scrollTo({ x: selectedStepIdx * SNAP_W, animated: true });
   }, [selectedStepIdx]);
 
   const handleDeleteRoadtrip = () => {
@@ -239,77 +283,39 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             ) : null}
           </View>
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Collaborators', { roadtripId: id })}
-            style={styles.headerBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Text style={styles.headerBtnText}>👥</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Text style={styles.headerBtnText}>⋯</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
 
-      {/* ─── Step info panel ───────────────────────────────────────── */}
-      {selectedStep && (
-        <TouchableOpacity
-          style={[styles.infoPanel, { bottom: 170 + Math.max(bottom, 12) }]}
-          onPress={() => {
-            if (effectiveCanEdit) {
-              navigation.navigate('EditStep', { step: selectedStep });
-            }
-          }}
-          activeOpacity={effectiveCanEdit ? 0.85 : 1}
-        >
-          <View style={styles.infoPanelInner}>
-            <View style={{ flex: 1 }}>
-              {(selectedStep.startDate || selectedStep.endDate) && (
-                <View style={styles.infoPanelDates}>
-                  <Text style={styles.infoPanelDatesText}>
-                    {selectedStep.startDate ? `🛬 ${formatDate(selectedStep.startDate)}${selectedStep.arrivalTime ? ` · ${selectedStep.arrivalTime}` : ''}` : ''}
-                  </Text>
-                  <Text style={styles.infoPanelDatesText}>
-                    {selectedStep.endDate ? `🛫 ${formatDate(selectedStep.endDate)}${selectedStep.departureTime ? ` · ${selectedStep.departureTime}` : ''}` : ''}
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.infoPanelName} numberOfLines={1}>{selectedStep.name}</Text>
-              {selectedStep.location && (
-                <Text style={styles.infoPanelMeta} numberOfLines={1}>📍 {selectedStep.location}</Text>
-              )}
-              {Array.isArray(selectedStep.activities) && (<>
-                <Text style={styles.infoPanelCounts}>
-                  {`🏨 ${selectedStep.accommodation ? 1 : 0} hébergement`}
-                </Text>
-                <Text style={styles.infoPanelCounts}>
-                  {`🎯 ${selectedStep.activities.length} activité${selectedStep.activities.length > 1 ? 's' : ''}`}
-                </Text>
-              </>)}
-            </View>
-          </View>
-        </TouchableOpacity>
-      )}
-
       {/* ─── Timeline Polarsteps ───────────────────────────────────── */}
       <View style={[styles.timelineContainer, { paddingBottom: Math.max(bottom, 12) }]}>
         <ScrollView
           ref={timelineRef}
           horizontal
+          style={{ height: CARD_H }}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.timelineContent}
+          contentContainerStyle={[styles.timelineContent, { paddingHorizontal: SIDE_PAD }]}
+          snapToInterval={SNAP_W}
+          decelerationRate="fast"
+          snapToAlignment="start"
+          onMomentumScrollEnd={(e) => {
+            const newIdx = Math.round(e.nativeEvent.contentOffset.x / SNAP_W);
+            if (newIdx >= 0 && newIdx < steps.length) setSelectedStepIdx(newIdx);
+          }}
         >
           {steps.map((step, idx) => (
-            <View key={step.id} style={styles.timelineRow}>
+            <View key={step.id} style={[styles.timelineRow, { marginRight: CARD_GAP, position: 'relative' }]}>
               <StepCard
                 step={step}
                 active={idx === selectedStepIdx}
                 dayNum={dayOffset(rt.startDate, step.startDate)}
                 onPress={() => setSelectedStepIdx(idx)}
+                onEdit={() => navigation.navigate('EditStep', { step })}
+                canEdit={effectiveCanEdit}
               />
-              {effectiveCanEdit && (
+              {effectiveCanEdit && idx < steps.length - 1 && (
                 <AddButton
                   onPress={() => navigation.navigate('CreateStep', {
                     roadtripId: rt.id,
@@ -325,7 +331,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
           {/* Bouton "+" final pour ajouter une étape à la fin */}
           {effectiveCanEdit && (
             <TouchableOpacity
-              style={styles.cardAddNew}
+              style={[styles.cardAddNew, { marginLeft: steps.length > 0 ? 0 : 0 }]}
               onPress={() => navigation.navigate('CreateStep', {
                 roadtripId: rt.id,
                 stepCount: steps.length,
@@ -336,7 +342,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
               <View style={styles.cardAddNewCircle}>
                 <Text style={styles.cardAddNewPlus}>+</Text>
               </View>
-              <Text style={styles.cardAddNewLabel}>Ajouter</Text>
+              <Text style={styles.cardAddNewLabel}>Ajouter une étape</Text>
             </TouchableOpacity>
           )}
         </ScrollView>
@@ -348,6 +354,11 @@ export default function RoadtripDetailScreen({ route, navigation }) {
           <Pressable style={[styles.menuSheet, { paddingBottom: Math.max(bottom, 16) }]} onPress={() => {}}>
             <View style={styles.menuHandle} />
             <Text style={styles.menuTitle}>Options</Text>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('Collaborators', { roadtripId: id }); }}>
+              <Text style={styles.menuItemIcon}>👥</Text>
+              <Text style={styles.menuItemLabel}>Collaborateurs</Text>
+            </TouchableOpacity>
             <View style={styles.menuDivider} />
             {effectiveIsOwner ? (
               <>
@@ -401,80 +412,95 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: FONTS.title, fontSize: 20, color: '#fff', fontWeight: '700' },
   headerSub: { fontSize: 12, color: 'rgba(255,255,255,1)', marginTop: 2 },
 
-  // Info panel
-  infoPanel: { position: 'absolute', left: SPACING.md, right: SPACING.md, zIndex: 10 },
-  infoPanelInner: {
-    backgroundColor: 'rgba(13,31,20,0.92)',
-    borderRadius: RADIUS.lg,
-    borderWidth: 1, borderColor: COLORS.border,
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
-    gap: SPACING.md,
-  },
-  infoPanelName: { color: COLORS.text, fontSize: 15, fontWeight: '700' },
-  infoPanelMeta: { color: COLORS.textMuted, fontSize: 11, marginTop: 2 },
-  infoPanelDates: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, marginBottom: 2 },
-  infoPanelDatesText: { color: COLORS.text, fontSize: 13, fontWeight: '700' },
-  infoPanelCounts: { color: COLORS.accent, fontSize: 11, marginTop: 3, fontWeight: '600' },
-  infoPanelActions: { flexDirection: 'row', gap: 8 },
-  infoPanelBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1, borderColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  infoPanelBtnText: { fontSize: 15 },
+  // Info panel — supprimé (la carte est le point d'entrée)
 
   // Timeline
   timelineContainer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(10,22,14,0.88)',
+    backgroundColor: 'rgba(10,22,14,0.92)',
     borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-    paddingTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    elevation: 5,
+    zIndex: 5,
   },
-  timelineContent: { paddingHorizontal: SPACING.md, alignItems: 'center', paddingBottom: 4 },
+  timelineContent: { alignItems: 'flex-start', paddingBottom: 4 },
   timelineRow: { flexDirection: 'row', alignItems: 'center' },
 
-  // Step card
-  card: { width: CARD_W, alignItems: 'center' },
-  cardCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: 'transparent',
+  // Step card — poster avec photo en fond
+  card: {
+    width: CARD_W, height: CARD_H,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
   },
-  cardCircleActive: {
+  cardActive: {
     borderColor: COLORS.accent,
-    shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 8, elevation: 6,
+    shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 10,
   },
-  cardInitials: { fontFamily: FONTS.title, fontSize: 17, color: '#fff' },
-  cardPhoto: { width: '100%', height: '100%', borderRadius: 24 },
-  cardDay: { fontSize: 9, color: 'rgba(255,255,255,0.4)', fontWeight: '700', marginTop: 5, letterSpacing: 0.5 },
-  cardDayActive: { color: COLORS.accent },
-  cardName: { fontSize: 10, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 2, lineHeight: 13 },
-  cardNameActive: { color: '#fff', fontWeight: '600' },
-
-  // Add between
-  addBetween: { flexDirection: 'row', alignItems: 'center', width: 40 },
-  addBetweenLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
-  addBetweenCircle: {
-    width: 20, height: 20, borderRadius: 10,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  // Overlay sombre uniforme (un seul layer = pas de bord visible)
+  cardOverlay1: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  // Badge jour
+  cardDayBadge: {
+    position: 'absolute', top: SPACING.sm, left: SPACING.sm,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
+  cardDayText: { color: COLORS.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  // Icône édition
+  cardEditBadge: {
+    position: 'absolute', top: SPACING.sm, right: SPACING.sm,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 28, height: 28, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  addBetweenPlus: { color: 'rgba(255,255,255,0.5)', fontSize: 14, lineHeight: 18 },
+  cardEditIcon: { fontSize: 13 },
+  // Contenu bas
+  cardContent: {
+    paddingHorizontal: SPACING.md, paddingBottom: SPACING.sm, gap: 2,
+  },
+  cardName: { fontSize: 15, color: '#fff', fontWeight: '700', lineHeight: 20 },
+  cardDate: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 1 },
+  cardLocation: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+  cardCounts: { flexDirection: 'row', gap: SPACING.sm, marginTop: 2 },
+  cardCountText: { fontSize: 11, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
+
+  // Add between — petit bouton flottant à droite de la carte
+  addBetween: {
+    position: 'absolute', right: -CARD_GAP / 2 - 10, top: '50%',
+    marginTop: -14,
+    zIndex: 10,
+  },
+  addBetweenLine: { display: 'none' },
+  addBetweenCircle: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(10,22,14,0.95)',
+  },
+  addBetweenPlus: { color: 'rgba(255,255,255,0.6)', fontSize: 14, lineHeight: 18, includeFontPadding: false },
 
   // Add new (fin de timeline)
-  cardAddNew: { width: CARD_W, alignItems: 'center', marginLeft: 4 },
-  cardAddNewCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    borderWidth: 2, borderColor: COLORS.accent,
+  cardAddNew: {
+    width: CARD_W, height: CARD_H,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(52,168,83,0.06)',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5, borderColor: COLORS.accent,
     borderStyle: 'dashed',
+    gap: SPACING.sm,
+  },
+  cardAddNewCircle: {
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 1.5, borderColor: COLORS.accent,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(52,168,83,0.08)',
   },
   cardAddNewPlus: { color: COLORS.accent, fontSize: 26, fontWeight: '300', lineHeight: 30 },
-  cardAddNewLabel: { fontSize: 10, color: COLORS.accent, marginTop: 5 },
+  cardAddNewLabel: { fontSize: 13, color: COLORS.accent, fontWeight: '600' },
 
   // Markers
   marker: {

@@ -4,6 +4,7 @@ import {
   ScrollView, Alert, ActivityIndicator, Modal,
   Image, Dimensions, Pressable,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, STEP_TYPE } from '../theme';
@@ -226,6 +227,34 @@ export default function EditStepScreen({ route, navigation }) {
         />
       </View>
 
+      {/* ─── Mini-carte ──────────────────────────────────────────────────── */}
+      {latitude && longitude ? (
+        <View style={styles.mapCard}>
+          <MapView
+            style={StyleSheet.absoluteFill}
+            region={{
+              latitude: parseFloat(latitude),
+              longitude: parseFloat(longitude),
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }}
+            scrollEnabled={false}
+            zoomEnabled={false}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            showsUserLocation={false}
+            showsCompass={false}
+            showsMyLocationButton={false}
+            pointerEvents="none"
+          >
+            <Marker
+              coordinate={{ latitude: parseFloat(latitude), longitude: parseFloat(longitude) }}
+              anchor={{ x: 0.5, y: 0.5 }}
+            />
+          </MapView>
+        </View>
+      ) : null}
+
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always">
 
         {/* ─── Arrivée / Départ ────────────────────────────────────────────── */}
@@ -347,6 +376,15 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg },
   locationWrapper: { paddingHorizontal: SPACING.lg },
+  mapCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    height: 150,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   scroll: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
   inputGroup: { marginBottom: SPACING.lg },
   row: { flexDirection: 'row', marginBottom: SPACING.lg },

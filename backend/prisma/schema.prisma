@@ -218,13 +218,26 @@ enum InviteStatus {
   DECLINED
 }
 
+enum FeedbackType {
+  BUG
+  SUGGESTION
+  QUESTION
+  AUTRE
+
+  @@map("feedback_type")
+}
+
 model BetaFeedback {
-  id        String   @id @default(cuid())
-  text      String
-  audioUrl  String?
-  createdAt DateTime @default(now())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String       @id @default(cuid())
+  text        String
+  audioUrl    String?
+  photoUrls   String[]
+  type        FeedbackType @default(AUTRE)
+  isHandled   Boolean      @default(false)
+  handledAt   DateTime?
+  createdAt   DateTime     @default(now())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("beta_feedbacks")
 }

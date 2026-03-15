@@ -55,10 +55,8 @@ export const ROADTRIP_STATUS = {
 };
 
 export const STEP_TYPE = {
-  DEPARTURE: { label: 'Départ', icon: '🛫' },
   STAGE: { label: 'Étape', icon: '📍' },
   STOP: { label: 'Arrêt', icon: '⏸' },
-  RETURN: { label: 'Retour', icon: '🛬' },
 };
 
 export const BOOKING_STATUS = {
