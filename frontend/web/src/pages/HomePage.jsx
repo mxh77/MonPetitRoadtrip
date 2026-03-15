@@ -32,7 +32,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   const token = localStorage.getItem('token');
-  const { name, email } = decodeToken(token ?? '');
+  const { name, email, isAdmin } = decodeToken(token ?? '');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -77,6 +77,7 @@ export default function HomePage() {
   function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
     navigate('/login');
   }
 
@@ -89,8 +90,11 @@ export default function HomePage() {
     }
   }
 
+  const [confirmDeclineId, setConfirmDeclineId] = useState(null);
+
   async function declineInvitation(id) {
-    if (!confirm('Refuser cette invitation ?')) return;
+    if (confirmDeclineId !== id) { setConfirmDeclineId(id); return; }
+    setConfirmDeclineId(null);
     try {
       await api.patch(`/invitations/${id}/decline`);
       fetchData();
@@ -125,6 +129,14 @@ export default function HomePage() {
             >
               + Nouveau roadtrip
             </Link>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="text-sm font-semibold px-3 py-2 rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition"
+              >
+                ⚙️ Admin
+              </Link>
+            )}
             <button onClick={logout} className="text-sm text-gray-500 hover:text-gray-800 transition">
               Déconnexion
             </button>
@@ -159,9 +171,13 @@ export default function HomePage() {
                     </button>
                     <button
                       onClick={() => declineInvitation(inv.id)}
-                      className="bg-white border border-gray-300 text-gray-700 text-sm font-semibold px-3 py-1.5 rounded-lg hover:bg-gray-50 transition"
+                      className={`text-sm font-semibold px-3 py-1.5 rounded-lg transition ${
+                        confirmDeclineId === inv.id
+                          ? 'bg-red-600 text-white hover:bg-red-700'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                      }`}
                     >
-                      Refuser
+                      {confirmDeclineId === inv.id ? 'Confirmer ?' : 'Refuser'}
                     </button>
                   </div>
                 </div>

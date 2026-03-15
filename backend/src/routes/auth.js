@@ -9,7 +9,7 @@ const ACCESS_TOKEN_TTL  = '1h';
 const REFRESH_TOKEN_DAYS = 90;
 
 function generateAccessToken(user) {
-  return jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET, {
+  return jwt.sign({ userId: user.id, email: user.email, isAdmin: user.isAdmin ?? false }, process.env.JWT_SECRET, {
     expiresIn: ACCESS_TOKEN_TTL,
   });
 }
@@ -39,7 +39,7 @@ router.post('/register', async (req, res) => {
 
   const user = await prisma.user.create({
     data: { email, name: name || null, password: hash },
-    select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, isAdmin: true, createdAt: true },
   });
 
   const token = generateAccessToken(user);
@@ -56,7 +56,9 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { email },
+    select: { id: true, email: true, name: true, avatarUrl: true, isAdmin: true, createdAt: true, password: true },
+  });
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -90,7 +92,7 @@ router.post('/refresh', async (req, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: stored.userId },
-    select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, isAdmin: true, createdAt: true },
   });
   if (!user) return res.status(401).json({ error: 'User not found' });
 

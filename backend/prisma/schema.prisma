@@ -16,6 +16,7 @@ model User {
   password   String?
   provider   String     @default("email")
   providerId String?
+  isAdmin    Boolean    @default(false)
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
   roadtrips      Roadtrip[]
@@ -219,10 +220,10 @@ enum InviteStatus {
 
 model BetaFeedback {
   id        String   @id @default(cuid())
-  userId    String
   text      String
   audioUrl  String?
   createdAt DateTime @default(now())
+  userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("beta_feedbacks")

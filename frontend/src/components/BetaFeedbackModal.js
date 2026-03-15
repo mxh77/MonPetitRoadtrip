@@ -16,45 +16,7 @@ import client from '../api/client';
 
 export default function BetaFeedbackModal({ visible, onClose }) {
   const [text, setText] = useState('');
-  const [isListening, setIsListening] = useState(false);
   const [isSending, setIsSending] = useState(false);
-
-  const handleMic = useCallback(async () => {
-    // expo-speech-recognition est requis pour la dictée vocale.
-    // Si le module n'est pas disponible, on informe l'utilisateur.
-    try {
-      const ExpoSpeechRecognitionModule = await import('expo-speech-recognition').catch(() => null);
-      if (!ExpoSpeechRecognitionModule) {
-        Alert.alert(
-          'Dictée non disponible',
-          'La dictée vocale nécessite un build natif. Vous pouvez saisir votre feedback manuellement.'
-        );
-        return;
-      }
-
-      const { ExpoSpeechRecognitionModule: SpeechModule } = ExpoSpeechRecognitionModule;
-
-      if (isListening) {
-        SpeechModule.stop();
-        setIsListening(false);
-        return;
-      }
-
-      const { granted } = await SpeechModule.requestPermissionsAsync();
-      if (!granted) {
-        Alert.alert('Permission refusée', 'L\'accès au microphone est nécessaire pour la dictée.');
-        return;
-      }
-
-      setIsListening(true);
-      SpeechModule.start({ lang: 'fr-FR', interimResults: false });
-    } catch {
-      Alert.alert(
-        'Dictée non disponible',
-        'La dictée vocale nécessite un build natif. Vous pouvez saisir votre feedback manuellement.'
-      );
-    }
-  }, [isListening]);
 
   const handleSend = useCallback(async () => {
     if (!text.trim()) {
@@ -76,10 +38,9 @@ export default function BetaFeedbackModal({ visible, onClose }) {
   }, [text, onClose]);
 
   const handleClose = useCallback(() => {
-    if (isListening) setIsListening(false);
     setText('');
     onClose();
-  }, [isListening, onClose]);
+  }, [onClose]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
@@ -110,11 +71,11 @@ export default function BetaFeedbackModal({ visible, onClose }) {
 
           <View style={styles.actions}>
             <TouchableOpacity
-              style={[styles.micBtn, isListening && styles.micBtnActive]}
-              onPress={handleMic}
-              disabled={isSending}
+              style={[styles.clearBtn, !text.trim() && styles.clearBtnDisabled]}
+              onPress={() => setText('')}
+              disabled={!text.trim() || isSending}
             >
-              <Text style={styles.micIcon}>{isListening ? '⏹' : '🎤'}</Text>
+              <Text style={styles.clearIcon}>🗑️</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -194,7 +155,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     marginBottom: SPACING.sm,
   },
-  micBtn: {
+  clearBtn: {
     width: 48,
     height: 48,
     borderRadius: RADIUS.full,
@@ -204,11 +165,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  micBtnActive: {
-    backgroundColor: COLORS.errorDim,
-    borderColor: COLORS.error,
+  clearBtnDisabled: {
+    opacity: 0.3,
   },
-  micIcon: { fontSize: 20 },
+  clearIcon: { fontSize: 20 },
   sendBtn: {
     flex: 1,
     height: 48,

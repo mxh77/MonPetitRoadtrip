@@ -316,8 +316,9 @@ export default function HomeScreen({ navigation }) {
     roadtripData: item,
   });
 
-  const firstName = user?.name?.split(/[\s&]+/)[0]?.trim() ?? '';
-  const restName = user?.name ? user.name.slice(firstName.length) : '';
+  const displayName = user?.name?.trim() || user?.email?.split('@')[0] || '';
+  const firstName = displayName.split(/[\s&]+/)[0]?.trim() ?? '';
+  const restName = displayName.slice(firstName.length);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -338,17 +339,19 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>BONJOUR 🔥</Text>
-            <Text style={styles.heroName}>
-              {firstName}
-              {restName ? <Text style={styles.heroNameItalic}>{restName}</Text> : null}
-            </Text>
+            {displayName ? (
+              <Text style={styles.heroName}>
+                {firstName}
+                {restName ? <Text style={styles.heroNameItalic}>{restName}</Text> : null}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconBtn}>
+            <TouchableOpacity>
               <Text style={styles.iconBtnText}>🔔</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconBtn, styles.avatarBtn]} onPress={() => setMenuVisible(true)}>
-              <Text style={styles.avatarText}>{(user?.name?.[0] ?? '?').toUpperCase()}</Text>
+            <TouchableOpacity style={styles.userPillAvatar} onPress={() => setMenuVisible(true)}>
+              <Text style={styles.userPillInitial}>{(displayName?.[0] ?? '?').toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -413,7 +416,7 @@ export default function HomeScreen({ navigation }) {
 
       {/* ─── Beta FAB ─────────────────────────────────────────────────────── */}
       <TouchableOpacity style={[styles.betaFab, { bottom: tabBarHeight + 12 }]} onPress={() => setFeedbackVisible(true)}>
-        <Text style={styles.betaFabText}>🎤</Text>
+        <Text style={styles.betaFabText}>💬</Text>
       </TouchableOpacity>
 
       {/* ─── Tab bar ──────────────────────────────────────────────────────── */}
@@ -444,14 +447,24 @@ const styles = StyleSheet.create({
   heroName: { fontFamily: FONTS.title, fontSize: 36, color: COLORS.text, lineHeight: 42 },
   heroNameItalic: { fontFamily: FONTS.titleItalic, color: COLORS.accent },
   headerIcons: { flexDirection: 'row', gap: SPACING.sm, marginTop: 4 },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: RADIUS.full,
-    backgroundColor: COLORS.surfaceElevated, borderWidth: 1, borderColor: COLORS.border,
-    alignItems: 'center', justifyContent: 'center',
+  iconBtnText: { fontSize: 22 },
+  userPillAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  iconBtnText: { fontSize: 17 },
-  avatarBtn: { backgroundColor: COLORS.accent },
-  avatarText: { fontFamily: FONTS.title, fontSize: 18, color: COLORS.bg },
+  userPillInitial: { fontFamily: FONTS.title, fontSize: 15, color: COLORS.bg },
+  userPillName: {
+    marginLeft: SPACING.xs,
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    flexShrink: 1,
+  },
+  userPillChevron: { marginLeft: 3, fontSize: 11, color: COLORS.textMuted },
 
   // Loader / Empty
   loader: { paddingTop: 80, alignItems: 'center' },

@@ -26,6 +26,7 @@ export default function LoginPage() {
       const { data } = await api.post(endpoint, payload);
       localStorage.setItem('token', data.token);
       localStorage.setItem('refreshToken', data.refreshToken);
+      localStorage.setItem('user', JSON.stringify(data.user));
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.error || (mode === 'login' ? 'Identifiants invalides' : 'Erreur lors de l\'inscription'));

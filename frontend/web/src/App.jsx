@@ -5,10 +5,23 @@ import HomePage from './pages/HomePage.jsx';
 import RoadtripPage from './pages/RoadtripPage.jsx';
 import RoadtripFormPage from './pages/RoadtripFormPage.jsx';
 import DownloadPage from './pages/DownloadPage.jsx';
+import AdminFeedbackPage from './pages/AdminFeedbackPage.jsx';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/login" replace />;
+}
+
+function decodeToken(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch { return {}; }
+}
+
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('token');
+  if (!token) return <Navigate to="/login" replace />;
+  const { isAdmin } = decodeToken(token);
+  if (!isAdmin) return <Navigate to="/" replace />;
+  return children;
 }
 
 export default function App() {
@@ -21,6 +34,7 @@ export default function App() {
         <Route path="/roadtrips/new" element={<ProtectedRoute><RoadtripFormPage /></ProtectedRoute>} />
         <Route path="/roadtrips/:id/edit" element={<ProtectedRoute><RoadtripFormPage /></ProtectedRoute>} />
         <Route path="/roadtrips/:id" element={<ProtectedRoute><RoadtripPage /></ProtectedRoute>} />
+        <Route path="/admin" element={<AdminRoute><AdminFeedbackPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
