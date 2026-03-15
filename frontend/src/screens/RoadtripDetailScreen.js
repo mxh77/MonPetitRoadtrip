@@ -76,7 +76,7 @@ class MapErrorBoundary extends Component {
 
 // ─── StepCard ─────────────────────────────────────────────────────────────────
 
-function StepCard({ step, active, dayNum, onPress, onEdit, canEdit }) {
+function StepCard({ step, active, dayNum, onPress, onEdit, canEdit, onLongPress, reordering }) {
   const initials = getInitials(step.name);
   const bg = STEP_COLORS[step.type] ?? '#1B4332';
   const hasPhoto = !!step.photoUrl;
@@ -94,7 +94,9 @@ function StepCard({ step, active, dayNum, onPress, onEdit, canEdit }) {
   return (
     <TouchableOpacity
       onPress={handlePress}
-      style={[styles.card, active && styles.cardActive, { backgroundColor: bg }]}
+      onLongPress={onLongPress}
+      delayLongPress={400}
+      style={[styles.card, active && styles.cardActive, reordering && styles.cardReordering, { backgroundColor: bg }]}
       activeOpacity={0.85}
     >
       {/* Photo plein format */}
@@ -108,6 +110,13 @@ function StepCard({ step, active, dayNum, onPress, onEdit, canEdit }) {
 
       {/* Overlay sombre uniforme — pas de bord visible */}
       <View style={styles.cardOverlay1} />
+
+      {/* Badge réorganisation */}
+      {reordering && (
+        <View style={styles.cardReorderBadge}>
+          <Text style={styles.cardReorderBadgeText}>✥</Text>
+        </View>
+      )}
 
       {/* Badge jour — top left */}
       {dayNum != null && (
@@ -160,11 +169,13 @@ function AddButton({ onPress }) {
 
 export default function RoadtripDetailScreen({ route, navigation }) {
   const { id, roadtripData, userRole: routeUserRole } = route.params;
-  const { deleteStep, deleteRoadtrip } = useRoadtripStore();
+  const { deleteStep, deleteRoadtrip, updateStep } = useRoadtripStore();
   const { roadtrip: syncedRoadtrip } = useRoadtrip(id);
   const { role, isOwner: roleIsOwner, canEdit: roleCanEdit, isLoading: roleLoading } = useRoadtripRole(id);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedStepIdx, setSelectedStepIdx] = useState(0);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [localSteps, setLocalSteps] = useState([]);
   const timelineRef = useRef(null);
   const mapRef = useRef(null);
   const { bottom, top } = useSafeAreaInsets();
@@ -180,8 +191,9 @@ export default function RoadtripDetailScreen({ route, navigation }) {
   useLayoutEffect(() => { navigation.setOptions({ headerShown: false }); }, [navigation]);
 
   const steps = rt?.steps ?? [];
-  const selectedStep = steps[selectedStepIdx] ?? null;
-  const stepsWithCoords = steps.filter(s => s.latitude != null && s.longitude != null && !isNaN(parseFloat(s.latitude)) && !isNaN(parseFloat(s.longitude)));
+  const displaySteps = reorderMode ? localSteps : steps;
+  const selectedStep = displaySteps[selectedStepIdx] ?? null;
+  const stepsWithCoords = displaySteps.filter(s => s.latitude != null && s.longitude != null && !isNaN(parseFloat(s.latitude)) && !isNaN(parseFloat(s.longitude)));
 
   // Centrer la carte sur l'étape sélectionnée
   useEffect(() => {
@@ -199,6 +211,69 @@ export default function RoadtripDetailScreen({ route, navigation }) {
     if (!timelineRef.current) return;
     timelineRef.current.scrollTo({ x: selectedStepIdx * SNAP_W, animated: true });
   }, [selectedStepIdx]);
+
+  // ─── Date helpers (local time — jamais UTC) ────────────────────────────────
+  const fromLocalDateStr = (str) => {
+    if (!str) return null;
+    const [y, m, d] = str.slice(0, 10).split('-').map(Number);
+    return new Date(y, m - 1, d, 12, 0, 0);
+  };
+  const toLocalDateStr = (d) => {
+    if (!d) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // ─── Réorganisation des étapes ──────────────────────────────────────────────
+  const enterReorderMode = () => {
+    setLocalSteps([...steps]);
+    setReorderMode(true);
+    setMenuVisible(false);
+  };
+
+  const moveStep = (idx, direction) => {
+    const newSteps = [...localSteps];
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= newSteps.length) return;
+    [newSteps[idx], newSteps[targetIdx]] = [newSteps[targetIdx], newSteps[idx]];
+    setLocalSteps(newSteps);
+    setSelectedStepIdx(targetIdx);
+    // Centrer la timeline sur la carte en cours de déplacement
+    const scrollX = Math.max(0, targetIdx * SNAP_W - (SCREEN_W - CARD_W) / 2);
+    setTimeout(() => {
+      timelineRef.current?.scrollTo({ x: scrollX, animated: true });
+    }, 50);
+  };
+
+  const saveReorder = async () => {
+    try {
+      const baseDate = rt?.startDate ? fromLocalDateStr(rt.startDate) : null;
+      let cursor = baseDate ? new Date(baseDate) : null;
+      for (let i = 0; i < localSteps.length; i++) {
+        const step = localSteps[i];
+        const updates = { order: i };
+        if (cursor) {
+          const origStart = fromLocalDateStr(step.startDate);
+          const origEnd = step.endDate ? fromLocalDateStr(step.endDate) : origStart;
+          const duration = (origStart && origEnd)
+            ? Math.max(1, Math.round((origEnd - origStart) / 86400000) + 1)
+            : 1;
+          updates.startDate = toLocalDateStr(cursor);
+          const endObj = new Date(cursor);
+          endObj.setDate(endObj.getDate() + duration - 1);
+          updates.endDate = toLocalDateStr(endObj);
+          cursor = new Date(endObj);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        await updateStep(step.id, updates);
+      }
+      setReorderMode(false);
+    } catch {
+      Alert.alert('Erreur', "Impossible de sauvegarder l'ordre.");
+    }
+  };
 
   const handleDeleteRoadtrip = () => {
     setMenuVisible(false);
@@ -241,7 +316,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
           )}
           {stepsWithCoords.map((step, idx) => {
             const isSelected = step.id === selectedStep?.id;
-            const stepIdx = steps.indexOf(step);
+            const stepIdx = displaySteps.indexOf(step);
             return (
               <Marker
                 key={step.id}
@@ -291,6 +366,18 @@ export default function RoadtripDetailScreen({ route, navigation }) {
 
       {/* ─── Timeline Polarsteps ───────────────────────────────────── */}
       <View style={[styles.timelineContainer, { paddingBottom: Math.max(bottom, 12) }]}>
+        {/* Barre mode réorganisation */}
+        {reorderMode && (
+          <View style={styles.reorderBar}>
+            <Text style={styles.reorderBarHint}>Appui long pour saisir · ← → pour déplacer</Text>
+            <TouchableOpacity style={styles.reorderCancelBtn} onPress={() => setReorderMode(false)}>
+              <Text style={styles.reorderCancelBtnText}>Annuler</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.reorderDoneBtn} onPress={saveReorder}>
+              <Text style={styles.reorderDoneBtnText}>Valider</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <ScrollView
           ref={timelineRef}
           horizontal
@@ -301,25 +388,49 @@ export default function RoadtripDetailScreen({ route, navigation }) {
           decelerationRate="fast"
           snapToAlignment="start"
           onMomentumScrollEnd={(e) => {
+            if (reorderMode) return; // la sélection suit la carte déplacée, pas le scroll
             const newIdx = Math.round(e.nativeEvent.contentOffset.x / SNAP_W);
-            if (newIdx >= 0 && newIdx < steps.length) setSelectedStepIdx(newIdx);
+            if (newIdx >= 0 && newIdx < displaySteps.length) setSelectedStepIdx(newIdx);
           }}
         >
-          {steps.map((step, idx) => (
+          {displaySteps.map((step, idx) => (
             <View key={step.id} style={[styles.timelineRow, { marginRight: CARD_GAP, position: 'relative' }]}>
               <StepCard
                 step={step}
                 active={idx === selectedStepIdx}
                 dayNum={dayOffset(rt.startDate, step.startDate)}
                 onPress={() => setSelectedStepIdx(idx)}
-                onEdit={() => navigation.navigate('EditStep', { step })}
+                onEdit={reorderMode ? () => setSelectedStepIdx(idx) : () => navigation.navigate('EditStep', { step })}
+                onLongPress={effectiveCanEdit && !reorderMode ? () => {
+                  setLocalSteps([...displaySteps]);
+                  setSelectedStepIdx(idx);
+                  setReorderMode(true);
+                } : undefined}
                 canEdit={effectiveCanEdit}
+                reordering={reorderMode && idx === selectedStepIdx}
               />
-              {effectiveCanEdit && idx < steps.length - 1 && (
+              {/* Flèches de réorganisation — carte sélectionnée uniquement */}
+              {reorderMode && idx === selectedStepIdx && (
+                <View style={styles.reorderOverlay} pointerEvents="box-none">
+                  <TouchableOpacity
+                    style={[styles.reorderArrow, idx === 0 && styles.reorderArrowDisabled]}
+                    onPress={() => idx > 0 && moveStep(idx, -1)}
+                  >
+                    <Text style={styles.reorderArrowText}>←</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.reorderArrow, idx === displaySteps.length - 1 && styles.reorderArrowDisabled]}
+                    onPress={() => idx < displaySteps.length - 1 && moveStep(idx, 1)}
+                  >
+                    <Text style={styles.reorderArrowText}>→</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {!reorderMode && effectiveCanEdit && idx < displaySteps.length - 1 && (
                 <AddButton
                   onPress={() => navigation.navigate('CreateStep', {
                     roadtripId: rt.id,
-                    stepCount: steps.length,
+                    stepCount: displaySteps.length,
                     insertAfterIdx: idx,
                     startDate: rt.startDate,
                   })}
@@ -328,8 +439,8 @@ export default function RoadtripDetailScreen({ route, navigation }) {
             </View>
           ))}
 
-          {/* Bouton "+" final pour ajouter une étape à la fin */}
-          {effectiveCanEdit && (
+          {/* Bouton "+" final — masqué en mode réorganisation */}
+          {!reorderMode && effectiveCanEdit && (
             <TouchableOpacity
               style={[styles.cardAddNew, { marginLeft: steps.length > 0 ? 0 : 0 }]}
               onPress={() => navigation.navigate('CreateStep', {
@@ -360,6 +471,7 @@ export default function RoadtripDetailScreen({ route, navigation }) {
               <Text style={styles.menuItemLabel}>Collaborateurs</Text>
             </TouchableOpacity>
             <View style={styles.menuDivider} />
+
             {effectiveIsOwner ? (
               <>
                 <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); navigation.navigate('EditRoadtrip', { roadtrip: rt }); }}>
@@ -501,6 +613,52 @@ const styles = StyleSheet.create({
   },
   cardAddNewPlus: { color: COLORS.accent, fontSize: 26, fontWeight: '300', lineHeight: 30 },
   cardAddNewLabel: { fontSize: 13, color: COLORS.accent, fontWeight: '600' },
+
+  // Reorder mode
+  reorderBar: {
+    flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
+    backgroundColor: 'rgba(52,168,83,0.15)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(52,168,83,0.3)',
+  },
+  reorderBarHint: { fontSize: 11, color: 'rgba(255,255,255,0.6)', flex: 1 },
+  reorderCancelBtn: {
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.sm, paddingVertical: 6,
+  },
+  reorderCancelBtnText: { color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600' },
+  reorderDoneBtn: {
+    backgroundColor: COLORS.accent, borderRadius: RADIUS.sm,
+    paddingHorizontal: SPACING.md, paddingVertical: 6,
+  },
+  reorderDoneBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  // Carte en cours de déplacement
+  cardReordering: {
+    borderColor: COLORS.accent,
+    borderWidth: 2.5,
+    shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.7, shadowRadius: 14, elevation: 14,
+    transform: [{ scale: 1.03 }],
+  },
+  cardReorderBadge: {
+    position: 'absolute', top: SPACING.sm, right: SPACING.sm,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cardReorderBadgeText: { color: COLORS.accent, fontSize: 14, lineHeight: 18, includeFontPadding: false },
+  reorderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: SPACING.sm,
+  },
+  reorderArrow: {
+    width: 40, height: 40, borderRadius: RADIUS.sm,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+  },
+  reorderArrowDisabled: { opacity: 0.25 },
+  reorderArrowText: { color: '#fff', fontSize: 20, fontWeight: '700', lineHeight: 24, includeFontPadding: false },
 
   // Markers
   marker: {

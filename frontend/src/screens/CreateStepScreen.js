@@ -3,6 +3,8 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
+import { MaterialIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, FONTS, RADIUS, SPACING, STEP_TYPE } from '../theme';
 import { useRoadtripStore } from '../store/roadtripStore';
@@ -52,6 +54,16 @@ export default function CreateStepScreen({ route, navigation }) {
   const [dtPickerTarget, setDtPickerTarget] = useState(null); // 'start' | 'end'
 
   const { createStep } = useRoadtripStore();
+
+  const miniMapRef = useRef(null);
+  const resetMapToMarker = () => {
+    miniMapRef.current?.animateToRegion({
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
+    }, 400);
+  };
 
   const handleSubmitRef = useRef();
 
@@ -154,6 +166,37 @@ export default function CreateStepScreen({ route, navigation }) {
         />
       </View>
 
+      {/* ─── Mini-carte ──────────────────────────────────────────────────── */}
+      {latitude && longitude ? (
+        <View style={styles.mapCard}>
+          <MapView
+            ref={miniMapRef}
+            style={StyleSheet.absoluteFill}
+            region={{
+              latitude: parseFloat(latitude),
+              longitude: parseFloat(longitude),
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }}
+            scrollEnabled={true}
+            zoomEnabled={true}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            showsUserLocation={false}
+            showsCompass={false}
+            showsMyLocationButton={false}
+          >
+            <Marker
+              coordinate={{ latitude: parseFloat(latitude), longitude: parseFloat(longitude) }}
+              anchor={{ x: 0.5, y: 0.5 }}
+            />
+          </MapView>
+          <TouchableOpacity style={styles.mapResetBtn} onPress={resetMapToMarker}>
+            <MaterialIcons name="my-location" size={20} color="#1a73e8" />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always">
 
         {/* ─── Arrivée / Départ ────────────────────────────────────────────── */}
@@ -228,6 +271,24 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.bg },
   header: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.lg },
   locationWrapper: { paddingHorizontal: SPACING.lg },
+  mapCard: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.sm,
+    height: 150,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  mapResetBtn: {
+    position: 'absolute',
+    bottom: SPACING.sm,
+    right: SPACING.sm,
+    width: 28, height: 28, borderRadius: 3,
+    backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.3, shadowRadius: 2, elevation: 4,
+  },
   scroll: { padding: SPACING.lg, paddingBottom: SPACING.xl * 2 },
 
   inputGroup: { marginBottom: SPACING.lg },

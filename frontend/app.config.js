@@ -14,7 +14,7 @@ require('dotenv').config({ path: path.resolve(__dirname, envFile) });
 module.exports = ({ config }) => {
   const finalConfig = {
     ...config,
-    name: IS_DEV ? 'MPR_Debug' : 'MPR',
+    name: IS_DEV ? 'MPR_Debug' : 'Mon Petit Roadtrip',
     slug: 'monpetitroadtrip',
     scheme: IS_DEV ? 'monpetitroadtrip-dev' : 'monpetitroadtrip',
     version: '1.0.0',
